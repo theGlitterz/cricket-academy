@@ -64,9 +64,9 @@
 
 ## Prompts 2–5 (Planned — Scope for Future Prompts)
 - [x] Prompt 2: Data model, business logic, and booking rules — COMPLETE
-- [ ] Prompt 3: Admin dashboard and booking management enhancements
-- [ ] Prompt 4: Slot management, settings, and UPI QR improvements
-- [ ] Prompt 5: Polish, testing, README, and deployment prep
+- [x] Prompt 3: Player-facing mobile booking experience — COMPLETE
+- [ ] Prompt 4: Slot management, settings, and UPI QR improvements (upcoming)
+- [ ] Prompt 5: Polish, testing, README, and deployment prep (upcoming)
 
 ## Prompt 2 of 5: Data Model, Business Logic & Booking Rules
 
@@ -100,3 +100,37 @@
 - [x] Update BookingPage to use new slot availability_status
 - [x] Update AdminBookingDetail to show payment_status separately from booking_status
 - [x] Update AdminDashboard stats to reflect new status fields
+
+## Prompt 3 of 5: Player-Facing Mobile Booking Experience
+
+### Landing Page
+- [x] Hero section: facility name, tagline, dual CTA (Book a Session + Track Booking)
+- [x] Info bar: working hours, WhatsApp, address
+- [x] Service cards: Ground Booking, Net Practice, Personal Coaching with price/duration/CTA
+- [x] How it works: 4-step visual guide
+- [x] Footer with facility contact info
+
+### Booking Flow (Multi-Step)
+- [x] Step 1 — Service selection: card-based selection with price, duration, description
+- [x] Step 2 — Date & slot: horizontal date scroller (14 days), slot grid with availability
+- [x] Step 3 — Player details: name + WhatsApp form with validation
+- [x] Step 4 — Payment: booking summary, UPI ID (copy), QR code, screenshot upload (mandatory)
+- [x] Step 5 — Done: reference ID, status badge, WhatsApp share CTA
+- [x] Step progress indicator (visual stepper)
+- [x] Back navigation between steps
+- [x] Cannot proceed without required selections/inputs
+- [x] Phone number validation (10+ digits, Indian format)
+- [x] Screenshot upload: mandatory, mobile gallery friendly, preview before submit
+
+### Booking Status Page
+- [x] Search by reference ID
+- [x] Search by WhatsApp number
+- [x] Status card: booking details, status badge, payment status
+- [x] Clear empty/not-found state
+
+### UX Polish
+- [x] Large tap-friendly buttons (min 48px height)
+- [x] Loading spinners on async actions
+- [x] Error messages on failed API calls
+- [x] Smooth step transitions
+- [x] Mobile viewport meta and scroll behavior
