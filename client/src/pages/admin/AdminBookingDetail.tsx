@@ -92,7 +92,7 @@ export default function AdminBookingDetail() {
   }
 
   const b = currentBooking;
-  const isPending = b.status === "pending";
+  const isPending = b.bookingStatus === "pending";
   const isProcessing =
     confirmMutation.isPending || rejectMutation.isPending || cancelMutation.isPending;
 
@@ -110,8 +110,8 @@ export default function AdminBookingDetail() {
           </h1>
           <p className="text-xs text-muted-foreground font-mono">{b.referenceId}</p>
         </div>
-        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${STATUS_CSS[b.status] ?? ""}`}>
-          {b.status}
+        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${STATUS_CSS[b.bookingStatus] ?? ""}`}>
+          {b.bookingStatus}
         </span>
       </div>
 
@@ -151,7 +151,7 @@ export default function AdminBookingDetail() {
             <div>
               <p className="text-xs text-muted-foreground">Amount</p>
               <p className="text-base font-bold text-primary">
-                ₹{parseFloat(b.amountPaid).toLocaleString("en-IN")}
+                ₹{parseFloat(String(b.amount)).toLocaleString("en-IN")}
               </p>
             </div>
             <div>
@@ -174,15 +174,15 @@ export default function AdminBookingDetail() {
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
             Payment Screenshot
           </p>
-          {b.paymentScreenshotUrl ? (
+          {b.screenshotUrl ? (
             <div className="space-y-2">
               <img
-                src={b.paymentScreenshotUrl}
+                src={b.screenshotUrl}
                 alt="Payment screenshot"
                 className="w-full max-h-64 object-contain rounded-lg border border-border bg-muted"
               />
               <a
-                href={b.paymentScreenshotUrl}
+                href={b.screenshotUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-xs text-primary flex items-center gap-1 hover:underline"
@@ -265,7 +265,7 @@ export default function AdminBookingDetail() {
         </Card>
       )}
 
-      {b.status === "confirmed" && (
+      {b.bookingStatus === "confirmed" && (
         <Button
           variant="outline"
           className="w-full border-red-200 text-red-600 hover:bg-red-50"

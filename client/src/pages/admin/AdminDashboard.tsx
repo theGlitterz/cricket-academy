@@ -222,7 +222,7 @@ function AdminDashboardContent() {
                     </div>
                     <div className="text-right">
                       <p className="text-sm font-bold text-primary">
-                        ₹{parseFloat(booking.amountPaid).toLocaleString("en-IN")}
+                        ₹{parseFloat(String(booking.amount)).toLocaleString("en-IN")}
                       </p>
                       <span className="text-xs status-pending px-2 py-0.5 rounded-full">
                         Pending

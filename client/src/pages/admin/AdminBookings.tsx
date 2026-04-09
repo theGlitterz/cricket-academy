@@ -79,9 +79,9 @@ export default function AdminBookings() {
                           {booking.playerName}
                         </p>
                         <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium shrink-0 ${STATUS_CSS[booking.status] ?? ""}`}
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium shrink-0 ${STATUS_CSS[booking.bookingStatus] ?? ""}`}
                         >
-                          {booking.status}
+                          {booking.bookingStatus}
                         </span>
                       </div>
                       <p className="text-xs text-muted-foreground font-mono mt-0.5">
@@ -100,7 +100,7 @@ export default function AdminBookings() {
                     </div>
                     <div className="text-right shrink-0 flex items-center gap-2">
                       <p className="text-sm font-bold text-primary">
-                        ₹{parseFloat(booking.amountPaid).toLocaleString("en-IN")}
+                        ₹{parseFloat(String(booking.amount)).toLocaleString("en-IN")}
                       </p>
                       <ChevronRight className="w-4 h-4 text-muted-foreground" />
                     </div>

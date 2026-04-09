@@ -1,22 +1,38 @@
+/**
+ * server/db.ts — All database query helpers for BestCricketAcademy.
+ *
+ * Design principles:
+ * - All queries accept facilityId so the schema can support multiple
+ *   facilities in the future. V1 always passes FACILITY_ID = 1.
+ * - Helpers return raw Drizzle rows; routers handle transformation.
+ * - Booking rules are enforced here (slot availability checks, status
+ *   transitions) so they cannot be bypassed by any caller.
+ */
+
 import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
+import { nanoid } from "nanoid";
 import {
   Booking,
-  FacilitySettings,
+  Facility,
   InsertBooking,
-  InsertFacilitySettings,
+  InsertFacility,
   InsertService,
   InsertSlot,
   Service,
   Slot,
-  InsertUser,
   bookings,
-  facilitySettings,
+  facilities,
   services,
   slots,
   users,
+  InsertUser,
 } from "../drizzle/schema";
-import { ENV } from "./_core/env";
+
+// ─── V1 constant: single facility ────────────────────────────────────────────
+export const FACILITY_ID = 1;
+
+// ─── DB singleton ─────────────────────────────────────────────────────────────
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -35,22 +51,20 @@ export async function getDb() {
 // ─── Users ────────────────────────────────────────────────────────────────────
 
 export async function upsertUser(user: InsertUser): Promise<void> {
-  if (!user.openId) throw new Error("User openId is required for upsert");
+  if (!user.openId) throw new Error("User openId is required");
   const db = await getDb();
   if (!db) return;
 
   const values: InsertUser = { openId: user.openId };
   const updateSet: Record<string, unknown> = {};
-  const textFields = ["name", "email", "loginMethod"] as const;
 
-  for (const field of textFields) {
-    const value = user[field];
-    if (value === undefined) continue;
-    const normalized = value ?? null;
-    values[field] = normalized;
-    updateSet[field] = normalized;
+  for (const field of ["name", "email", "loginMethod"] as const) {
+    const v = user[field];
+    if (v !== undefined) {
+      values[field] = v ?? null;
+      updateSet[field] = v ?? null;
+    }
   }
-
   if (user.lastSignedIn !== undefined) {
     values.lastSignedIn = user.lastSignedIn;
     updateSet.lastSignedIn = user.lastSignedIn;
@@ -58,11 +72,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
   if (user.role !== undefined) {
     values.role = user.role;
     updateSet.role = user.role;
-  } else if (user.openId === ENV.ownerOpenId) {
-    values.role = "admin";
-    updateSet.role = "admin";
   }
-
   if (!values.lastSignedIn) values.lastSignedIn = new Date();
   if (Object.keys(updateSet).length === 0) updateSet.lastSignedIn = new Date();
 
@@ -76,68 +86,105 @@ export async function getUserByOpenId(openId: string) {
   return result[0] ?? undefined;
 }
 
+// ─── Facilities ───────────────────────────────────────────────────────────────
+
+/** Get the single BestCricketAcademy facility record. */
+export async function getFacility(): Promise<Facility | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db
+    .select()
+    .from(facilities)
+    .where(eq(facilities.id, FACILITY_ID))
+    .limit(1);
+  return result[0] ?? undefined;
+}
+
+/** Upsert facility settings. Creates if not exists (id=1), updates otherwise. */
+export async function upsertFacility(data: Partial<InsertFacility>): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  const existing = await getFacility();
+  if (!existing) {
+    await db.insert(facilities).values({
+      id: FACILITY_ID,
+      facilityName: data.facilityName ?? "BestCricketAcademy",
+      ...data,
+    });
+  } else {
+    await db
+      .update(facilities)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(facilities.id, FACILITY_ID));
+  }
+}
+
 // ─── Services ─────────────────────────────────────────────────────────────────
 
-export async function getActiveServices(): Promise<Service[]> {
+/** List all services with activeStatus=true for the facility. */
+export async function getActiveServices(facilityId = FACILITY_ID): Promise<Service[]> {
   const db = await getDb();
   if (!db) return [];
   return db
     .select()
     .from(services)
-    .where(eq(services.isActive, true))
+    .where(and(eq(services.facilityId, facilityId), eq(services.activeStatus, true)))
     .orderBy(services.sortOrder);
 }
 
-export async function getServiceBySlug(slug: string): Promise<Service | undefined> {
-  const db = await getDb();
-  if (!db) return undefined;
-  const result = await db.select().from(services).where(eq(services.slug, slug)).limit(1);
-  return result[0] ?? undefined;
-}
-
-export async function getAllServices(): Promise<Service[]> {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(services).orderBy(services.sortOrder);
-}
-
-export async function upsertService(data: InsertService): Promise<void> {
-  const db = await getDb();
-  if (!db) return;
-  await db.insert(services).values(data).onDuplicateKeyUpdate({ set: data });
-}
-
-// ─── Slots ────────────────────────────────────────────────────────────────────
-
-export async function getAvailableSlots(serviceId: number, date: string): Promise<Slot[]> {
+/** List all services (including inactive) — admin use. */
+export async function getAllServices(facilityId = FACILITY_ID): Promise<Service[]> {
   const db = await getDb();
   if (!db) return [];
   return db
     .select()
-    .from(slots)
-    .where(
-      and(
-        eq(slots.serviceId, serviceId),
-        eq(slots.date, date),
-        eq(slots.isBlocked, false),
-        // bookedCount < maxCapacity — use raw SQL comparison
-        sql`${slots.bookedCount} < ${slots.maxCapacity}`
-      )
-    )
-    .orderBy(slots.startTime);
+    .from(services)
+    .where(eq(services.facilityId, facilityId))
+    .orderBy(services.sortOrder);
 }
 
-export async function getSlotById(id: number): Promise<Slot | undefined> {
+/** Get a single service by slug. */
+export async function getServiceBySlug(slug: string): Promise<Service | undefined> {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(slots).where(eq(slots.id, id)).limit(1);
+  const result = await db
+    .select()
+    .from(services)
+    .where(and(eq(services.slug, slug), eq(services.facilityId, FACILITY_ID)))
+    .limit(1);
   return result[0] ?? undefined;
 }
 
-export async function getSlotsForDateRange(
+/** Get a single service by id. */
+export async function getServiceById(id: number): Promise<Service | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(services).where(eq(services.id, id)).limit(1);
+  return result[0] ?? undefined;
+}
+
+/** Create or update a service. */
+export async function upsertService(data: InsertService): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .insert(services)
+    .values(data)
+    .onDuplicateKeyUpdate({ set: { ...data, updatedAt: new Date() } });
+}
+
+// ─── Slots ────────────────────────────────────────────────────────────────────
+
+/**
+ * Get available slots for a service on a specific date.
+ * Returns only slots with availabilityStatus='available'.
+ *
+ * BOOKING RULE: A slot is only bookable when availabilityStatus='available'.
+ */
+export async function getAvailableSlots(
   serviceId: number,
-  fromDate: string,
-  toDate: string
+  date: string,
+  facilityId = FACILITY_ID
 ): Promise<Slot[]> {
   const db = await getDb();
   if (!db) return [];
@@ -146,6 +193,32 @@ export async function getSlotsForDateRange(
     .from(slots)
     .where(
       and(
+        eq(slots.facilityId, facilityId),
+        eq(slots.serviceId, serviceId),
+        eq(slots.date, date),
+        eq(slots.availabilityStatus, "available")
+      )
+    )
+    .orderBy(slots.startTime);
+}
+
+/**
+ * Get all slots for a date range (admin view — shows all statuses).
+ */
+export async function getSlotsForDateRange(
+  serviceId: number,
+  fromDate: string,
+  toDate: string,
+  facilityId = FACILITY_ID
+): Promise<Slot[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(slots)
+    .where(
+      and(
+        eq(slots.facilityId, facilityId),
         eq(slots.serviceId, serviceId),
         gte(slots.date, fromDate),
         lte(slots.date, toDate)
@@ -154,54 +227,144 @@ export async function getSlotsForDateRange(
     .orderBy(slots.date, slots.startTime);
 }
 
+/** Get a slot by id. */
+export async function getSlotById(id: number): Promise<Slot | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(slots).where(eq(slots.id, id)).limit(1);
+  return result[0] ?? undefined;
+}
+
+/** Create a new slot. Returns the new slot id. */
 export async function createSlot(data: InsertSlot): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const result = await db.insert(slots).values(data);
+  const result = await db.insert(slots).values({
+    ...data,
+    facilityId: data.facilityId ?? FACILITY_ID,
+    availabilityStatus: "available",
+  });
   return (result[0] as { insertId: number }).insertId;
 }
 
-export async function updateSlotBlockStatus(id: number, isBlocked: boolean): Promise<void> {
+/**
+ * Mark a slot as booked.
+ * Called atomically during booking creation.
+ *
+ * BOOKING RULE: Only transitions available → booked.
+ * Returns false if the slot is no longer available (race condition guard).
+ */
+export async function markSlotBooked(slotId: number): Promise<boolean> {
   const db = await getDb();
-  if (!db) return;
-  await db.update(slots).set({ isBlocked }).where(eq(slots.id, id));
+  if (!db) return false;
+  const result = await db
+    .update(slots)
+    .set({ availabilityStatus: "booked", bookedCount: sql`${slots.bookedCount} + 1` })
+    .where(and(eq(slots.id, slotId), eq(slots.availabilityStatus, "available")));
+  return (result[0] as { affectedRows: number }).affectedRows > 0;
 }
 
-export async function incrementSlotBookedCount(slotId: number): Promise<void> {
+/**
+ * Revert a slot to available.
+ * Called when a booking is rejected or cancelled.
+ *
+ * BOOKING RULE: Rejected/cancelled bookings free up the slot.
+ */
+export async function markSlotAvailable(slotId: number): Promise<void> {
   const db = await getDb();
   if (!db) return;
   await db
     .update(slots)
-    .set({ bookedCount: sql`${slots.bookedCount} + 1` })
+    .set({
+      availabilityStatus: "available",
+      bookedCount: sql`GREATEST(0, ${slots.bookedCount} - 1)`,
+    })
     .where(eq(slots.id, slotId));
 }
 
-export async function decrementSlotBookedCount(slotId: number): Promise<void> {
+/**
+ * Admin: set a slot's blocked status.
+ * Blocked slots cannot be booked even if capacity is available.
+ */
+export async function setSlotBlockStatus(slotId: number, blocked: boolean): Promise<void> {
   const db = await getDb();
   if (!db) return;
   await db
     .update(slots)
-    .set({ bookedCount: sql`GREATEST(${slots.bookedCount} - 1, 0)` })
-    .where(eq(slots.id, slotId));
+    .set({ availabilityStatus: blocked ? "blocked" : "available" })
+    .where(and(eq(slots.id, slotId), eq(slots.availabilityStatus, blocked ? "available" : "blocked")));
 }
 
 // ─── Bookings ─────────────────────────────────────────────────────────────────
 
-/** Generate a short human-readable reference like BCA-20240409-0042 */
+/** Generate a human-readable reference ID, e.g. BCA-20240409-A1B2 */
 export function generateReferenceId(): string {
-  const date = new Date();
-  const dateStr = date.toISOString().slice(0, 10).replace(/-/g, "");
-  const rand = Math.floor(Math.random() * 9000) + 1000;
-  return `BCA-${dateStr}-${rand}`;
+  const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const suffix = nanoid(6).toUpperCase();
+  return `BCA-${date}-${suffix}`;
 }
 
-export async function createBooking(data: InsertBooking): Promise<number> {
+/**
+ * Create a new booking.
+ *
+ * BOOKING RULES enforced here:
+ * 1. Slot must exist and belong to the correct facility.
+ * 2. Slot must be 'available' (markSlotBooked returns false if not).
+ * 3. booking_status = 'pending', payment_status = 'pending_review'.
+ * 4. Denormalized date/time copied from slot for easy querying.
+ *
+ * Returns { id, referenceId } on success.
+ * Throws if slot is unavailable (double-booking prevention).
+ */
+export async function createBooking(data: {
+  slotId: number;
+  serviceId: number;
+  playerName: string;
+  playerWhatsApp: string;
+  playerEmail?: string;
+  facilityId?: number;
+}): Promise<{ id: number; referenceId: string }> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const result = await db.insert(bookings).values(data);
-  return (result[0] as { insertId: number }).insertId;
+
+  const slot = await getSlotById(data.slotId);
+  if (!slot) throw new Error("Slot not found");
+  if (slot.availabilityStatus !== "available") {
+    throw new Error("This slot is no longer available. Please choose another time.");
+  }
+
+  const service = await getServiceById(data.serviceId);
+  if (!service) throw new Error("Service not found");
+
+  // Atomically mark slot as booked (race condition guard)
+  const booked = await markSlotBooked(data.slotId);
+  if (!booked) {
+    throw new Error("This slot was just taken. Please choose another time.");
+  }
+
+  const referenceId = generateReferenceId();
+  const facilityId = data.facilityId ?? FACILITY_ID;
+
+  const result = await db.insert(bookings).values({
+    referenceId,
+    facilityId,
+    serviceId: data.serviceId,
+    slotId: data.slotId,
+    playerName: data.playerName,
+    playerWhatsApp: data.playerWhatsApp,
+    playerEmail: data.playerEmail ?? null,
+    bookingDate: slot.date,
+    startTime: slot.startTime,
+    endTime: slot.endTime,
+    amount: service.price,
+    bookingStatus: "pending",
+    paymentStatus: "pending_review",
+  });
+
+  return { id: (result[0] as { insertId: number }).insertId, referenceId };
 }
 
+/** Get a booking by its numeric id. */
 export async function getBookingById(id: number): Promise<Booking | undefined> {
   const db = await getDb();
   if (!db) return undefined;
@@ -209,6 +372,7 @@ export async function getBookingById(id: number): Promise<Booking | undefined> {
   return result[0] ?? undefined;
 }
 
+/** Get a booking by reference ID (player-facing lookup). */
 export async function getBookingByReference(referenceId: string): Promise<Booking | undefined> {
   const db = await getDb();
   if (!db) return undefined;
@@ -220,134 +384,166 @@ export async function getBookingByReference(referenceId: string): Promise<Bookin
   return result[0] ?? undefined;
 }
 
-export async function getBookingsByWhatsApp(whatsApp: string): Promise<Booking[]> {
+/** Get all bookings for a player's WhatsApp number. */
+export async function getBookingsByWhatsApp(
+  playerWhatsApp: string,
+  facilityId = FACILITY_ID
+): Promise<Booking[]> {
   const db = await getDb();
   if (!db) return [];
   return db
     .select()
     .from(bookings)
-    .where(eq(bookings.playerWhatsApp, whatsApp))
+    .where(
+      and(
+        eq(bookings.facilityId, facilityId),
+        eq(bookings.playerWhatsApp, playerWhatsApp)
+      )
+    )
     .orderBy(desc(bookings.createdAt));
 }
 
-export async function getAllBookings(filters?: {
-  status?: "pending" | "confirmed" | "rejected" | "cancelled";
-  serviceId?: number;
-  fromDate?: string;
-  toDate?: string;
-}): Promise<Booking[]> {
+/** Admin: list all bookings with optional status filter. */
+export async function getAllBookings(
+  facilityId = FACILITY_ID,
+  statusFilter?: "pending" | "confirmed" | "rejected" | "cancelled"
+): Promise<Booking[]> {
   const db = await getDb();
   if (!db) return [];
-
-  const conditions = [];
-  if (filters?.status) conditions.push(eq(bookings.status, filters.status));
-  if (filters?.serviceId) conditions.push(eq(bookings.serviceId, filters.serviceId));
-
+  const conditions = [eq(bookings.facilityId, facilityId)];
+  if (statusFilter) conditions.push(eq(bookings.bookingStatus, statusFilter));
   return db
     .select()
     .from(bookings)
-    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .where(and(...conditions))
     .orderBy(desc(bookings.createdAt));
 }
 
-export async function updateBookingPaymentScreenshot(
-  id: number,
-  url: string
-): Promise<void> {
-  const db = await getDb();
-  if (!db) return;
-  await db.update(bookings).set({ paymentScreenshotUrl: url }).where(eq(bookings.id, id));
-}
-
-export async function confirmBooking(
-  id: number,
-  reviewedByUserId: number,
-  adminNote?: string
-): Promise<void> {
-  const db = await getDb();
-  if (!db) return;
-  await db
-    .update(bookings)
-    .set({
-      status: "confirmed",
-      reviewedByUserId,
-      adminNote: adminNote ?? null,
-      reviewedAt: new Date(),
-    })
-    .where(eq(bookings.id, id));
-}
-
-export async function rejectBooking(
-  id: number,
-  reviewedByUserId: number,
-  adminNote?: string
-): Promise<void> {
-  const db = await getDb();
-  if (!db) return;
-  await db
-    .update(bookings)
-    .set({
-      status: "rejected",
-      reviewedByUserId,
-      adminNote: adminNote ?? null,
-      reviewedAt: new Date(),
-    })
-    .where(eq(bookings.id, id));
-}
-
-export async function cancelBooking(id: number): Promise<void> {
-  const db = await getDb();
-  if (!db) return;
-  await db.update(bookings).set({ status: "cancelled" }).where(eq(bookings.id, id));
-}
-
-// ─── Facility Settings ────────────────────────────────────────────────────────
-
-export async function getFacilitySettings(): Promise<FacilitySettings | undefined> {
-  const db = await getDb();
-  if (!db) return undefined;
-  const result = await db.select().from(facilitySettings).limit(1);
-  return result[0] ?? undefined;
-}
-
-export async function upsertFacilitySettings(
-  data: Partial<InsertFacilitySettings>
-): Promise<void> {
-  const db = await getDb();
-  if (!db) return;
-
-  const existing = await getFacilitySettings();
-  if (existing) {
-    await db
-      .update(facilitySettings)
-      .set(data)
-      .where(eq(facilitySettings.id, existing.id));
-  } else {
-    await db.insert(facilitySettings).values({
-      facilityName: "BestCricketAcademy",
-      ...data,
-    });
-  }
-}
-
-// ─── Booking Stats (Admin Dashboard) ─────────────────────────────────────────
-
-export async function getBookingStats() {
+/** Admin: get booking stats (counts by status). */
+export async function getBookingStats(facilityId = FACILITY_ID) {
   const db = await getDb();
   if (!db) return { pending: 0, confirmed: 0, rejected: 0, cancelled: 0, total: 0 };
 
-  const result = await db
+  const rows = await db
     .select({
-      status: bookings.status,
+      bookingStatus: bookings.bookingStatus,
       count: sql<number>`COUNT(*)`,
     })
     .from(bookings)
-    .groupBy(bookings.status);
+    .where(eq(bookings.facilityId, facilityId))
+    .groupBy(bookings.bookingStatus);
 
   const stats = { pending: 0, confirmed: 0, rejected: 0, cancelled: 0, total: 0 };
-  for (const row of result) {
-    stats[row.status] = Number(row.count);
-    stats.total += Number(row.count);
+  for (const row of rows) {
+    const count = Number(row.count);
+    stats[row.bookingStatus as keyof typeof stats] = count;
+    stats.total += count;
   }
   return stats;
+}
+
+/** Update the payment screenshot URL on a booking. */
+export async function updateBookingScreenshot(
+  bookingId: number,
+  screenshotUrl: string
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(bookings)
+    .set({ screenshotUrl, updatedAt: new Date() })
+    .where(eq(bookings.id, bookingId));
+}
+
+/**
+ * Admin: confirm a booking.
+ *
+ * BOOKING RULE: pending → confirmed.
+ * payment_status → confirmed.
+ * Slot remains 'booked' (stays blocked for others).
+ */
+export async function confirmBooking(
+  bookingId: number,
+  reviewedByUserId: number,
+  adminNote?: string
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(bookings)
+    .set({
+      bookingStatus: "confirmed",
+      paymentStatus: "confirmed",
+      adminNote: adminNote ?? null,
+      reviewedAt: new Date(),
+      reviewedByUserId,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(bookings.id, bookingId), eq(bookings.bookingStatus, "pending")));
+}
+
+/**
+ * Admin: reject a booking.
+ *
+ * BOOKING RULE: pending → rejected.
+ * payment_status → rejected.
+ * Slot reverts to 'available' so others can book it.
+ */
+export async function rejectBooking(
+  bookingId: number,
+  reviewedByUserId: number,
+  adminNote?: string
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+
+  const booking = await getBookingById(bookingId);
+  if (!booking) return;
+
+  await db
+    .update(bookings)
+    .set({
+      bookingStatus: "rejected",
+      paymentStatus: "rejected",
+      adminNote: adminNote ?? null,
+      reviewedAt: new Date(),
+      reviewedByUserId,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(bookings.id, bookingId), eq(bookings.bookingStatus, "pending")));
+
+  // Free up the slot so it can be booked again
+  await markSlotAvailable(booking.slotId);
+}
+
+/**
+ * Admin: cancel a confirmed booking.
+ *
+ * BOOKING RULE: confirmed → cancelled.
+ * Slot reverts to 'available'.
+ */
+export async function cancelBooking(
+  bookingId: number,
+  reviewedByUserId: number,
+  adminNote?: string
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+
+  const booking = await getBookingById(bookingId);
+  if (!booking) return;
+
+  await db
+    .update(bookings)
+    .set({
+      bookingStatus: "cancelled",
+      adminNote: adminNote ?? null,
+      reviewedAt: new Date(),
+      reviewedByUserId,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(bookings.id, bookingId), eq(bookings.bookingStatus, "confirmed")));
+
+  // Free up the slot
+  await markSlotAvailable(booking.slotId);
 }

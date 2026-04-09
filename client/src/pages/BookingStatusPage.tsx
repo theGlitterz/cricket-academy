@@ -49,14 +49,14 @@ function BookingCard({ booking }: { booking: {
   id: number;
   referenceId: string;
   playerName: string;
-  status: BookingStatus;
-  amountPaid: string;
+  bookingStatus: BookingStatus;
+  amount: string;
   adminNote: string | null;
   createdAt: Date;
   slotId: number;
   serviceId: number;
 } }) {
-  const config = STATUS_CONFIG[booking.status];
+  const config = STATUS_CONFIG[booking.bookingStatus];
   return (
     <Card className="border border-border">
       <CardContent className="p-4 space-y-3">
@@ -81,7 +81,7 @@ function BookingCard({ booking }: { booking: {
             })}
           </span>
           <span className="font-semibold text-foreground">
-            ₹{parseFloat(booking.amountPaid).toLocaleString("en-IN")}
+            ₹{parseFloat(String(booking.amount)).toLocaleString("en-IN")}
           </span>
         </div>
 
@@ -93,7 +93,7 @@ function BookingCard({ booking }: { booking: {
           </div>
         )}
 
-        {booking.status === "pending" && (
+        {booking.bookingStatus === "pending" && (
           <p className="text-xs text-yellow-700 bg-yellow-50 rounded-lg px-3 py-2">
             ⏳ Your booking is being reviewed. You'll be notified on WhatsApp once confirmed.
           </p>
@@ -119,7 +119,7 @@ export default function BookingStatusPage() {
 
   const { data: bookingsByPhone, isLoading: loadingPhone } =
     trpc.bookings.getByWhatsApp.useQuery(
-      { whatsApp: activeSearch?.type === "phone" ? activeSearch.value : "" },
+      { playerWhatsApp: activeSearch?.type === "phone" ? activeSearch.value : "" },
       { enabled: activeSearch?.type === "phone" && !!activeSearch.value }
     );
 

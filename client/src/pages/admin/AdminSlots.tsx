@@ -62,7 +62,7 @@ export default function AdminSlots() {
 
   const createBulkMutation = trpc.slots.createBulk.useMutation({
     onSuccess: (data) => {
-      toast.success(`Created ${data.count} slots!`);
+      toast.success(`Created ${data.created} slots!`);
       utils.slots.getForRange.invalidate();
     },
     onError: (err) => toast.error(err.message),
@@ -88,15 +88,13 @@ export default function AdminSlots() {
 
   const handleCreateBulk = () => {
     if (!selectedServiceId) return toast.error("Select a service first");
-    const dates: string[] = [];
-    for (let i = 0; i < bulkDays; i++) {
-      const d = new Date(selectedDate + "T00:00:00");
-      d.setDate(d.getDate() + i);
-      dates.push(d.toISOString().slice(0, 10));
-    }
+    const fromDate = selectedDate;
+    const toDate = new Date(selectedDate + "T00:00:00");
+    toDate.setDate(toDate.getDate() + bulkDays - 1);
     createBulkMutation.mutate({
       serviceId: parseInt(selectedServiceId),
-      dates,
+      fromDate,
+      toDate: toDate.toISOString().slice(0, 10),
       timeSlots: DEFAULT_TIME_SLOTS,
       maxCapacity: parseInt(maxCapacity),
     });
@@ -251,7 +249,7 @@ export default function AdminSlots() {
               {slots.map((slot) => (
                 <Card
                   key={slot.id}
-                  className={`border ${slot.isBlocked ? "border-red-200 bg-red-50/50" : "border-border"}`}
+                  className={`border ${slot.availabilityStatus === "blocked" ? "border-red-200 bg-red-50/50" : "border-border"}`}
                 >
                   <CardContent className="p-3">
                     <div className="flex items-center justify-between">
@@ -261,19 +259,19 @@ export default function AdminSlots() {
                         </p>
                         <p className="text-xs text-muted-foreground">
                           {slot.bookedCount}/{slot.maxCapacity} booked
-                          {slot.isBlocked && " · Blocked"}
+                          {slot.availabilityStatus === "blocked" && " · Blocked"}
                         </p>
                       </div>
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() =>
-                          blockMutation.mutate({ id: slot.id, isBlocked: !slot.isBlocked })
+                          blockMutation.mutate({ id: slot.id, blocked: slot.availabilityStatus !== "blocked" })
                         }
                         disabled={blockMutation.isPending}
-                        className={slot.isBlocked ? "text-green-600 hover:text-green-700" : "text-red-500 hover:text-red-600"}
+                        className={slot.availabilityStatus === "blocked" ? "text-green-600 hover:text-green-700" : "text-red-500 hover:text-red-600"}
                       >
-                        {slot.isBlocked ? (
+                        {slot.availabilityStatus === "blocked" ? (
                           <><Unlock className="w-3.5 h-3.5 mr-1" />Unblock</>
                         ) : (
                           <><Lock className="w-3.5 h-3.5 mr-1" />Block</>

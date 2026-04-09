@@ -10,13 +10,15 @@ import { Save, Upload, Loader2, CheckCircle2 } from "lucide-react";
 import AdminLayout from "./AdminLayout";
 
 export default function AdminSettings() {
-  const { data: settings, isLoading } = trpc.settings.get.useQuery();
+  const { data: facility, isLoading } = trpc.facility.get.useQuery();
+  const settings = facility;
   const utils = trpc.useUtils();
 
   const [form, setForm] = useState({
     facilityName: "",
+    coachName: "",
+    coachWhatsApp: "",
     address: "",
-    contactWhatsApp: "",
     upiId: "",
     paymentInstructions: "",
     workingHours: "",
@@ -28,36 +30,37 @@ export default function AdminSettings() {
   const qrRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (settings) {
+    if (facility) {
       setForm({
-        facilityName: settings.facilityName ?? "",
-        address: settings.address ?? "",
-        contactWhatsApp: settings.contactWhatsApp ?? "",
-        upiId: settings.upiId ?? "",
-        paymentInstructions: settings.paymentInstructions ?? "",
-        workingHours: settings.workingHours ?? "",
-        googleMapsUrl: settings.googleMapsUrl ?? "",
+        facilityName: facility.facilityName ?? "",
+        coachName: facility.coachName ?? "",
+        coachWhatsApp: facility.coachWhatsApp ?? "",
+        address: facility.address ?? "",
+        upiId: facility.upiId ?? "",
+        paymentInstructions: facility.paymentInstructions ?? "",
+        workingHours: facility.workingHours ?? "",
+        googleMapsUrl: facility.googleMapsUrl ?? "",
       });
-      setQrUrl(settings.upiQrCodeUrl ?? null);
+      setQrUrl(facility.upiQrImageUrl ?? null);
     }
-  }, [settings]);
+  }, [facility]);
 
-  const updateMutation = trpc.settings.update.useMutation({
+  const updateMutation = trpc.facility.update.useMutation({
     onSuccess: () => {
       toast.success("Settings saved!");
-      utils.settings.get.invalidate();
+      utils.facility.get.invalidate();
     },
-    onError: (err) => toast.error(err.message),
+    onError: (err: { message: string }) => toast.error(err.message),
   });
 
-  const uploadQrMutation = trpc.settings.uploadQrCode.useMutation({
-    onSuccess: (data) => {
+  const uploadQrMutation = trpc.facility.uploadQrCode.useMutation({
+    onSuccess: (data: { url: string }) => {
       setQrUrl(data.url);
       setQrUploading(false);
       toast.success("QR code uploaded!");
-      utils.settings.get.invalidate();
+      utils.facility.get.invalidate();
     },
-    onError: (err) => {
+    onError: (err: { message: string }) => {
       toast.error(err.message);
       setQrUploading(false);
     },
@@ -66,8 +69,9 @@ export default function AdminSettings() {
   const handleSave = () => {
     updateMutation.mutate({
       facilityName: form.facilityName || undefined,
+      coachName: form.coachName || undefined,
+      coachWhatsApp: form.coachWhatsApp || undefined,
       address: form.address || undefined,
-      contactWhatsApp: form.contactWhatsApp || undefined,
       upiId: form.upiId || undefined,
       paymentInstructions: form.paymentInstructions || undefined,
       workingHours: form.workingHours || undefined,
@@ -86,7 +90,7 @@ export default function AdminSettings() {
     const reader = new FileReader();
     reader.onload = () => {
       const base64 = (reader.result as string).split(",")[1];
-      uploadQrMutation.mutate({ imageBase64: base64, mimeType: file.type });
+      uploadQrMutation.mutate({ fileBase64: base64, mimeType: file.type });
     };
     reader.readAsDataURL(file);
   };
@@ -134,14 +138,24 @@ export default function AdminSettings() {
               placeholder="Full address shown on booking page"
             />
           </div>
-          <div className="space-y-1.5">
-            <Label>WhatsApp Contact</Label>
-            <Input
-              type="tel"
-              value={form.contactWhatsApp}
-              onChange={set("contactWhatsApp")}
-              placeholder="+91 98765 43210"
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Coach Name</Label>
+              <Input
+                value={form.coachName}
+                onChange={set("coachName")}
+                placeholder="Coach Ramesh"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Coach WhatsApp</Label>
+              <Input
+                type="tel"
+                value={form.coachWhatsApp}
+                onChange={set("coachWhatsApp")}
+                placeholder="+91 98765 43210"
+              />
+            </div>
           </div>
           <div className="space-y-1.5">
             <Label>Working Hours</Label>

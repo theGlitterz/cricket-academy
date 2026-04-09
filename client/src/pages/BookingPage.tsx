@@ -128,7 +128,7 @@ function ServiceStep({
                   id: service.id,
                   slug: service.slug,
                   name: service.name,
-                  price: service.pricePerSlot,
+                  price: service.price,
                 })
               }
             >
@@ -143,7 +143,7 @@ function ServiceStep({
                   </div>
                   <div className="text-right shrink-0">
                     <p className="font-bold text-primary text-sm">
-                      ₹{parseFloat(service.pricePerSlot).toLocaleString("en-IN")}
+                      ₹{parseFloat(String(service.price)).toLocaleString("en-IN")}
                     </p>
                     <p className="text-xs text-muted-foreground">{service.durationMinutes} min</p>
                   </div>
@@ -386,7 +386,7 @@ function PaymentStep({
   booking: BookingState;
   onPaymentUploaded: () => void;
 }) {
-  const { data: settings } = trpc.settings.get.useQuery();
+  const { data: settings } = trpc.facility.get.useQuery();
   const [uploading, setUploading] = useState(false);
   const [uploaded, setUploaded] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -418,7 +418,7 @@ function PaymentStep({
       const base64 = (reader.result as string).split(",")[1];
       uploadMutation.mutate({
         bookingId: booking.bookingId!,
-        imageBase64: base64,
+        fileBase64: base64,
         mimeType: file.type,
       });
     };
@@ -455,11 +455,11 @@ function PaymentStep({
       </div>
 
       {/* UPI QR */}
-      {settings?.upiQrCodeUrl ? (
+      {settings?.upiQrImageUrl ? (
         <div className="bg-card border border-border rounded-xl p-4 text-center space-y-3">
           <p className="text-sm font-semibold text-foreground">Scan QR Code to Pay</p>
           <img
-            src={settings.upiQrCodeUrl}
+            src={settings.upiQrImageUrl}
             alt="UPI QR Code"
             className="w-48 h-48 mx-auto rounded-lg object-contain"
           />
@@ -631,7 +631,7 @@ export default function BookingPage() {
       serviceId: preloadedService.id,
       serviceSlug: preloadedService.slug,
       serviceName: preloadedService.name,
-      servicePrice: preloadedService.pricePerSlot,
+      servicePrice: String(preloadedService.price),
     });
   }
 

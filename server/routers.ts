@@ -1,38 +1,49 @@
-import { COOKIE_NAME } from "@shared/const";
+/**
+ * server/routers.ts — tRPC router for BestCricketAcademy
+ *
+ * Procedures are split into logical namespaces:
+ *   facility  — public facility info + admin settings management
+ *   services  — public service listing + admin CRUD
+ *   slots     — public availability + admin slot management
+ *   bookings  — public booking creation/lookup + admin review
+ *   system    — platform notifications (from template)
+ *   auth      — login/logout (from template)
+ */
+
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { COOKIE_NAME } from "@shared/const";
+import { getSessionCookieOptions } from "./_core/cookies";
+import { systemRouter } from "./_core/systemRouter";
+import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
+import { notifyOwner } from "./_core/notification";
+import { storagePut } from "./storage";
 import {
+  FACILITY_ID,
   cancelBooking,
   confirmBooking,
   createBooking,
   createSlot,
-  decrementSlotBookedCount,
-  generateReferenceId,
-  getActiveServices,
   getAllBookings,
   getAllServices,
+  getActiveServices,
   getAvailableSlots,
-  getBookingById,
   getBookingByReference,
-  getBookingsByWhatsApp,
+  getBookingById,
   getBookingStats,
-  getFacilitySettings,
+  getBookingsByWhatsApp,
+  getFacility,
   getServiceBySlug,
-  getSlotById,
   getSlotsForDateRange,
-  incrementSlotBookedCount,
+  getSlotById,
   rejectBooking,
-  updateBookingPaymentScreenshot,
-  updateSlotBlockStatus,
-  upsertFacilitySettings,
+  setSlotBlockStatus,
+  updateBookingScreenshot,
+  upsertFacility,
   upsertService,
 } from "./db";
-import { getSessionCookieOptions } from "./_core/cookies";
-import { systemRouter } from "./_core/systemRouter";
-import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
-import { storagePut } from "./storage";
 
-// ─── Admin guard middleware ───────────────────────────────────────────────────
+// ─── Admin guard ──────────────────────────────────────────────────────────────
 
 const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
   if (ctx.user.role !== "admin") {
@@ -41,33 +52,85 @@ const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
   return next({ ctx });
 });
 
-// ─── Services router ──────────────────────────────────────────────────────────
+// ─── Facility router ──────────────────────────────────────────────────────────
 
-const servicesRouter = router({
-  list: publicProcedure.query(() => getActiveServices()),
+const facilityRouter = router({
+  /** Public: get facility info (name, contact, UPI, working hours) */
+  get: publicProcedure.query(async () => {
+    return (await getFacility()) ?? null;
+  }),
 
-  listAll: adminProcedure.query(() => getAllServices()),
-
-  getBySlug: publicProcedure
-    .input(z.object({ slug: z.string() }))
-    .query(({ input }) => getServiceBySlug(input.slug)),
-
-  upsert: adminProcedure
+  /** Admin: update facility settings */
+  update: adminProcedure
     .input(
       z.object({
-        id: z.number().optional(),
-        slug: z.string().min(1),
-        name: z.string().min(1),
-        description: z.string().optional(),
-        pricePerSlot: z.string(), // decimal as string
-        durationMinutes: z.number().int().positive(),
-        maxCapacity: z.number().int().positive(),
-        isActive: z.boolean(),
-        sortOrder: z.number().int(),
+        facilityName: z.string().min(1).optional(),
+        coachName: z.string().optional(),
+        coachWhatsApp: z.string().optional(),
+        upiId: z.string().optional(),
+        upiQrImageUrl: z.string().url().optional(),
+        address: z.string().optional(),
+        workingHours: z.string().optional(),
+        paymentInstructions: z.string().optional(),
+        googleMapsUrl: z.string().optional(),
       })
     )
     .mutation(async ({ input }) => {
-      await upsertService(input as Parameters<typeof upsertService>[0]);
+      await upsertFacility(input);
+      return { success: true };
+    }),
+
+  /** Admin: upload UPI QR code image, returns CDN URL */
+  uploadQrCode: adminProcedure
+    .input(
+      z.object({
+        fileBase64: z.string(),
+        mimeType: z.string().default("image/png"),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const buffer = Buffer.from(input.fileBase64, "base64");
+      const ext = input.mimeType.split("/")[1] ?? "png";
+      const key = `facility/upi-qr-${Date.now()}.${ext}`;
+      const { url } = await storagePut(key, buffer, input.mimeType);
+      await upsertFacility({ upiQrImageUrl: url });
+      return { url };
+    }),
+});
+
+// ─── Services router ──────────────────────────────────────────────────────────
+
+const servicesRouter = router({
+  /** Public: list active services with price and duration */
+  list: publicProcedure.query(async () => {
+    return getActiveServices(FACILITY_ID);
+  }),
+
+  /** Admin: list all services including inactive */
+  listAll: adminProcedure.query(async () => {
+    return getAllServices(FACILITY_ID);
+  }),
+
+  /** Admin: create or update a service */
+  upsert: adminProcedure
+    .input(
+      z.object({
+        id: z.number().int().optional(),
+        slug: z.string().min(1),
+        name: z.string().min(1),
+        description: z.string().optional(),
+        durationMinutes: z.number().int().min(15),
+        price: z.string(), // decimal as string to avoid float precision issues
+        activeStatus: z.boolean().default(true),
+        sortOrder: z.number().int().default(0),
+      })
+    )
+    .mutation(async ({ input }) => {
+      await upsertService({
+        ...input,
+        facilityId: FACILITY_ID,
+        price: input.price,
+      });
       return { success: true };
     }),
 });
@@ -75,10 +138,22 @@ const servicesRouter = router({
 // ─── Slots router ─────────────────────────────────────────────────────────────
 
 const slotsRouter = router({
+  /**
+   * Public: get available slots for a service on a given date.
+   * Only returns slots with availabilityStatus='available'.
+   */
   getAvailable: publicProcedure
-    .input(z.object({ serviceId: z.number().int(), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }))
-    .query(({ input }) => getAvailableSlots(input.serviceId, input.date)),
+    .input(
+      z.object({
+        serviceId: z.number().int(),
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      })
+    )
+    .query(async ({ input }) => {
+      return getAvailableSlots(input.serviceId, input.date, FACILITY_ID);
+    }),
 
+  /** Admin: get all slots for a date range (all statuses) */
   getForRange: adminProcedure
     .input(
       z.object({
@@ -87,10 +162,11 @@ const slotsRouter = router({
         toDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
       })
     )
-    .query(({ input }) =>
-      getSlotsForDateRange(input.serviceId, input.fromDate, input.toDate)
-    ),
+    .query(async ({ input }) => {
+      return getSlotsForDateRange(input.serviceId, input.fromDate, input.toDate, FACILITY_ID);
+    }),
 
+  /** Admin: create a single slot */
   create: adminProcedure
     .input(
       z.object({
@@ -98,50 +174,68 @@ const slotsRouter = router({
         date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
         startTime: z.string().regex(/^\d{2}:\d{2}$/),
         endTime: z.string().regex(/^\d{2}:\d{2}$/),
-        maxCapacity: z.number().int().positive().default(1),
+        maxCapacity: z.number().int().min(1).default(1),
       })
     )
     .mutation(async ({ input }) => {
-      const id = await createSlot(input);
+      const id = await createSlot({ ...input, facilityId: FACILITY_ID });
       return { id };
     }),
 
-  /** Create multiple slots in bulk (e.g., generate a week of slots) */
+  /**
+   * Admin: bulk create slots for a date range.
+   * Generates a standard daily schedule for each day in the range.
+   */
   createBulk: adminProcedure
     .input(
       z.object({
         serviceId: z.number().int(),
-        dates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)),
+        fromDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        toDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
         timeSlots: z.array(
           z.object({
             startTime: z.string().regex(/^\d{2}:\d{2}$/),
             endTime: z.string().regex(/^\d{2}:\d{2}$/),
           })
         ),
-        maxCapacity: z.number().int().positive().default(1),
+        maxCapacity: z.number().int().min(1).default(1),
       })
     )
     .mutation(async ({ input }) => {
-      const created: number[] = [];
-      for (const date of input.dates) {
-        for (const time of input.timeSlots) {
-          const id = await createSlot({
-            serviceId: input.serviceId,
-            date,
-            startTime: time.startTime,
-            endTime: time.endTime,
-            maxCapacity: input.maxCapacity,
-          });
-          created.push(id);
+      const service = await getServiceBySlug(""); // just to get service info
+      const from = new Date(input.fromDate);
+      const to = new Date(input.toDate);
+      let created = 0;
+
+      for (let d = new Date(from); d <= to; d.setDate(d.getDate() + 1)) {
+        const date = d.toISOString().slice(0, 10);
+        for (const ts of input.timeSlots) {
+          try {
+            await createSlot({
+              facilityId: FACILITY_ID,
+              serviceId: input.serviceId,
+              date,
+              startTime: ts.startTime,
+              endTime: ts.endTime,
+              maxCapacity: input.maxCapacity,
+            });
+            created++;
+          } catch {
+            // Skip duplicates silently
+          }
         }
       }
-      return { count: created.length, ids: created };
+      return { created };
     }),
 
+  /**
+   * Admin: block or unblock a slot.
+   * Blocked slots cannot be booked.
+   */
   setBlocked: adminProcedure
-    .input(z.object({ id: z.number().int(), isBlocked: z.boolean() }))
+    .input(z.object({ id: z.number().int(), blocked: z.boolean() }))
     .mutation(async ({ input }) => {
-      await updateSlotBlockStatus(input.id, input.isBlocked);
+      await setSlotBlockStatus(input.id, input.blocked);
       return { success: true };
     }),
 });
@@ -149,98 +243,123 @@ const slotsRouter = router({
 // ─── Bookings router ──────────────────────────────────────────────────────────
 
 const bookingsRouter = router({
-  /** Player: create a new booking request */
+  /**
+   * Public: create a new booking.
+   *
+   * BOOKING RULES enforced in db.createBooking():
+   * - Slot must be available (availabilityStatus='available')
+   * - Slot is atomically marked 'booked' to prevent double-booking
+   * - booking_status = 'pending', payment_status = 'pending_review'
+   */
   create: publicProcedure
     .input(
       z.object({
         slotId: z.number().int(),
         serviceId: z.number().int(),
-        playerName: z.string().min(1).max(128),
-        playerWhatsApp: z.string().min(10).max(20),
+        playerName: z.string().min(1, "Name is required"),
+        playerWhatsApp: z.string().min(10, "WhatsApp number is required"),
         playerEmail: z.string().email().optional(),
       })
     )
     .mutation(async ({ input }) => {
-      // Verify slot exists and has capacity
-      const slot = await getSlotById(input.slotId);
-      if (!slot) throw new TRPCError({ code: "NOT_FOUND", message: "Slot not found" });
-      if (slot.isBlocked)
-        throw new TRPCError({ code: "BAD_REQUEST", message: "This slot is not available" });
-      if (slot.bookedCount >= slot.maxCapacity)
-        throw new TRPCError({ code: "BAD_REQUEST", message: "This slot is fully booked" });
+      try {
+        const result = await createBooking({
+          slotId: input.slotId,
+          serviceId: input.serviceId,
+          playerName: input.playerName,
+          playerWhatsApp: input.playerWhatsApp,
+          playerEmail: input.playerEmail,
+          facilityId: FACILITY_ID,
+        });
 
-      // Get service for price
-      const allServices = await getActiveServices();
-      const service = allServices.find((s) => s.id === input.serviceId);
-      if (!service)
-        throw new TRPCError({ code: "NOT_FOUND", message: "Service not found" });
+        // Notify coach of new booking (non-blocking)
+        notifyOwner({
+          title: "New Booking Request",
+          content: `${input.playerName} (${input.playerWhatsApp}) has submitted a booking request. Reference: ${result.referenceId}`,
+        }).catch(() => {});
 
-      const referenceId = generateReferenceId();
-      const id = await createBooking({
-        referenceId,
-        slotId: input.slotId,
-        serviceId: input.serviceId,
-        playerName: input.playerName,
-        playerWhatsApp: input.playerWhatsApp,
-        playerEmail: input.playerEmail,
-        amountPaid: service.pricePerSlot,
-        status: "pending",
-      });
-
-      // Reserve the slot
-      await incrementSlotBookedCount(input.slotId);
-
-      return { id, referenceId };
+        return result;
+      } catch (error) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: error instanceof Error ? error.message : "Booking failed",
+        });
+      }
     }),
 
-  /** Player: upload payment screenshot (base64 → S3) */
+  /**
+   * Public: upload payment screenshot for a booking.
+   * Accepts base64-encoded image.
+   */
   uploadPayment: publicProcedure
     .input(
       z.object({
         bookingId: z.number().int(),
-        /** base64-encoded image data (without data URI prefix) */
-        imageBase64: z.string(),
+        fileBase64: z.string(),
         mimeType: z.string().default("image/jpeg"),
       })
     )
     .mutation(async ({ input }) => {
       const booking = await getBookingById(input.bookingId);
       if (!booking) throw new TRPCError({ code: "NOT_FOUND", message: "Booking not found" });
-      if (booking.status !== "pending")
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Booking is no longer pending" });
+      if (booking.bookingStatus !== "pending") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Booking is not pending" });
+      }
 
-      const buffer = Buffer.from(input.imageBase64, "base64");
+      const buffer = Buffer.from(input.fileBase64, "base64");
       const ext = input.mimeType.split("/")[1] ?? "jpg";
       const key = `payments/${booking.referenceId}-${Date.now()}.${ext}`;
       const { url } = await storagePut(key, buffer, input.mimeType);
 
-      await updateBookingPaymentScreenshot(booking.id, url);
-      return { url };
+      await updateBookingScreenshot(input.bookingId, url);
+
+      // Notify coach that screenshot was uploaded
+      notifyOwner({
+        title: "Payment Screenshot Uploaded",
+        content: `${booking.playerName} has uploaded a payment screenshot for booking ${booking.referenceId}. Please review and confirm.`,
+      }).catch(() => {});
+
+      return { screenshotUrl: url };
     }),
 
-  /** Player: look up their bookings by WhatsApp number */
-  getByWhatsApp: publicProcedure
-    .input(z.object({ whatsApp: z.string().min(10) }))
-    .query(({ input }) => getBookingsByWhatsApp(input.whatsApp)),
-
-  /** Player/Admin: get a single booking by reference ID */
+  /** Public: look up a booking by reference ID */
   getByReference: publicProcedure
     .input(z.object({ referenceId: z.string() }))
-    .query(({ input }) => getBookingByReference(input.referenceId)),
+    .query(async ({ input }) => {
+      const booking = await getBookingByReference(input.referenceId);
+      if (!booking) throw new TRPCError({ code: "NOT_FOUND", message: "Booking not found" });
+      return booking;
+    }),
 
-  /** Admin: list all bookings with optional filters */
+  /** Public: look up all bookings for a WhatsApp number */
+  getByWhatsApp: publicProcedure
+    .input(z.object({ playerWhatsApp: z.string().min(10) }))
+    .query(async ({ input }) => {
+      return getBookingsByWhatsApp(input.playerWhatsApp, FACILITY_ID);
+    }),
+
+  /** Admin: list all bookings with optional status filter */
   adminList: adminProcedure
     .input(
       z.object({
         status: z
           .enum(["pending", "confirmed", "rejected", "cancelled"])
           .optional(),
-        serviceId: z.number().int().optional(),
       })
     )
-    .query(({ input }) => getAllBookings(input)),
+    .query(async ({ input }) => {
+      return getAllBookings(FACILITY_ID, input.status);
+    }),
 
-  /** Admin: confirm a booking */
+  /** Admin: get booking stats */
+  stats: adminProcedure.query(async () => {
+    return getBookingStats(FACILITY_ID);
+  }),
+
+  /**
+   * Admin: confirm a booking.
+   * BOOKING RULE: pending → confirmed; slot stays booked.
+   */
   confirm: adminProcedure
     .input(
       z.object({
@@ -251,14 +370,20 @@ const bookingsRouter = router({
     .mutation(async ({ input, ctx }) => {
       const booking = await getBookingById(input.id);
       if (!booking) throw new TRPCError({ code: "NOT_FOUND", message: "Booking not found" });
-      if (booking.status !== "pending")
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Only pending bookings can be confirmed" });
-
-      await confirmBooking(booking.id, ctx.user.id, input.adminNote);
+      if (booking.bookingStatus !== "pending") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Cannot confirm a booking with status '${booking.bookingStatus}'`,
+        });
+      }
+      await confirmBooking(input.id, ctx.user.id, input.adminNote);
       return { success: true };
     }),
 
-  /** Admin: reject a booking */
+  /**
+   * Admin: reject a booking.
+   * BOOKING RULE: pending → rejected; slot reverts to available.
+   */
   reject: adminProcedure
     .input(
       z.object({
@@ -269,79 +394,45 @@ const bookingsRouter = router({
     .mutation(async ({ input, ctx }) => {
       const booking = await getBookingById(input.id);
       if (!booking) throw new TRPCError({ code: "NOT_FOUND", message: "Booking not found" });
-      if (booking.status !== "pending")
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Only pending bookings can be rejected" });
-
-      await rejectBooking(booking.id, ctx.user.id, input.adminNote);
-      // Free up the slot
-      await decrementSlotBookedCount(booking.slotId);
+      if (booking.bookingStatus !== "pending") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Cannot reject a booking with status '${booking.bookingStatus}'`,
+        });
+      }
+      await rejectBooking(input.id, ctx.user.id, input.adminNote);
       return { success: true };
     }),
 
-  /** Admin: cancel a confirmed booking */
+  /**
+   * Admin: cancel a confirmed booking.
+   * BOOKING RULE: confirmed → cancelled; slot reverts to available.
+   */
   cancel: adminProcedure
-    .input(z.object({ id: z.number().int() }))
-    .mutation(async ({ input }) => {
+    .input(
+      z.object({
+        id: z.number().int(),
+        adminNote: z.string().optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
       const booking = await getBookingById(input.id);
       if (!booking) throw new TRPCError({ code: "NOT_FOUND", message: "Booking not found" });
-
-      await cancelBooking(booking.id);
-      if (booking.status === "confirmed" || booking.status === "pending") {
-        await decrementSlotBookedCount(booking.slotId);
+      if (booking.bookingStatus !== "confirmed") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Cannot cancel a booking with status '${booking.bookingStatus}'`,
+        });
       }
+      await cancelBooking(input.id, ctx.user.id, input.adminNote);
       return { success: true };
-    }),
-
-  /** Admin: dashboard stats */
-  stats: adminProcedure.query(() => getBookingStats()),
-});
-
-// ─── Facility Settings router ─────────────────────────────────────────────────
-
-const settingsRouter = router({
-  get: publicProcedure.query(() => getFacilitySettings()),
-
-  update: adminProcedure
-    .input(
-      z.object({
-        facilityName: z.string().optional(),
-        address: z.string().optional(),
-        contactWhatsApp: z.string().optional(),
-        upiId: z.string().optional(),
-        upiQrCodeUrl: z.string().optional(),
-        paymentInstructions: z.string().optional(),
-        workingHours: z.string().optional(),
-        googleMapsUrl: z.string().optional(),
-      })
-    )
-    .mutation(async ({ input }) => {
-      await upsertFacilitySettings(input);
-      return { success: true };
-    }),
-
-  /** Admin: upload UPI QR code image */
-  uploadQrCode: adminProcedure
-    .input(
-      z.object({
-        imageBase64: z.string(),
-        mimeType: z.string().default("image/png"),
-      })
-    )
-    .mutation(async ({ input }) => {
-      const buffer = Buffer.from(input.imageBase64, "base64");
-      const ext = input.mimeType.split("/")[1] ?? "png";
-      const key = `settings/upi-qr-${Date.now()}.${ext}`;
-      const { url } = await storagePut(key, buffer, input.mimeType);
-      await upsertFacilitySettings({ upiQrCodeUrl: url });
-      return { url };
     }),
 });
 
-// ─── App Router ───────────────────────────────────────────────────────────────
+// ─── App router ───────────────────────────────────────────────────────────────
 
 export const appRouter = router({
   system: systemRouter,
-
   auth: router({
     me: publicProcedure.query((opts) => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
@@ -350,11 +441,10 @@ export const appRouter = router({
       return { success: true } as const;
     }),
   }),
-
+  facility: facilityRouter,
   services: servicesRouter,
   slots: slotsRouter,
   bookings: bookingsRouter,
-  settings: settingsRouter,
 });
 
 export type AppRouter = typeof appRouter;

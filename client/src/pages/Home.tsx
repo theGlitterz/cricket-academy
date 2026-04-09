@@ -95,7 +95,7 @@ function HowItWorksStep({
 
 export default function Home() {
   const { data: services, isLoading } = trpc.services.list.useQuery();
-  const { data: settings } = trpc.settings.get.useQuery();
+  const { data: settings } = trpc.facility.get.useQuery();
 
   return (
     <div className="min-h-screen bg-background">
@@ -185,13 +185,13 @@ export default function Home() {
                   {settings.workingHours}
                 </span>
               )}
-              {settings.contactWhatsApp && (
+              {settings.coachWhatsApp && (
                 <a
-                  href={`https://wa.me/${settings.contactWhatsApp.replace(/\D/g, "")}`}
+                  href={`https://wa.me/${settings.coachWhatsApp.replace(/\D/g, "")}`}
                   className="flex items-center gap-1.5 hover:text-primary transition-colors"
                 >
                   <Phone className="w-3.5 h-3.5 text-primary" />
-                  {settings.contactWhatsApp}
+                  {settings.coachWhatsApp}
                 </a>
               )}
               {settings.address && (
@@ -233,7 +233,7 @@ export default function Home() {
                 slug={service.slug}
                 name={service.name}
                 description={service.description}
-                price={service.pricePerSlot}
+                price={service.price}
                 duration={service.durationMinutes}
               />
             ))}
@@ -323,12 +323,12 @@ export default function Home() {
             {settings?.address && (
               <p className="text-xs text-muted-foreground">{settings.address}</p>
             )}
-            {settings?.contactWhatsApp && (
+            {settings?.coachWhatsApp && (
               <a
-                href={`https://wa.me/${settings.contactWhatsApp.replace(/\D/g, "")}`}
+                href={`https://wa.me/${settings.coachWhatsApp.replace(/\D/g, "")}`}
                 className="text-xs text-primary"
               >
-                WhatsApp: {settings.contactWhatsApp}
+                WhatsApp: {settings.coachWhatsApp}
               </a>
             )}
             <div className="flex gap-4 pt-1">

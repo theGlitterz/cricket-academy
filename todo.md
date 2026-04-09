@@ -62,8 +62,41 @@
 - [x] Vitest tests for core booking procedures (11 tests, all passing)
 - [x] Vitest tests for admin confirm/reject/stats procedures
 
-## Prompts 2–5 (Planned, Not Yet Started)
-- [ ] Prompt 2: Full player booking flow end-to-end polish
+## Prompts 2–5 (Planned — Scope for Future Prompts)
+- [x] Prompt 2: Data model, business logic, and booking rules — COMPLETE
 - [ ] Prompt 3: Admin dashboard and booking management enhancements
 - [ ] Prompt 4: Slot management, settings, and UPI QR improvements
 - [ ] Prompt 5: Polish, testing, README, and deployment prep
+
+## Prompt 2 of 5: Data Model, Business Logic & Booking Rules
+
+### Schema Refinements
+- [x] Add `facilities` table with id, facility_name, coach_name, coach_whatsapp_number, upi_id, upi_qr_image_url, address, working_hours, payment_instructions
+- [x] Update `services` table: add facility_id FK, rename pricePerSlot → price, keep all existing fields
+- [x] Update `slots` table: add facility_id FK, replace isBlocked+bookedCount with single availability_status enum (available/booked/blocked)
+- [x] Update `bookings` table: add facility_id FK, add payment_status enum (pending_review/confirmed/rejected), rename status → booking_status, add booking_date, start_time, end_time denormalized columns
+- [x] Apply migration SQL to database
+
+### Booking Business Rules
+- [x] Prevent double-booking: slot availability_status = 'booked' blocks new bookings for same slot
+- [x] On booking create: set booking_status=pending, payment_status=pending_review, slot=booked
+- [x] On coach confirm: set booking_status=confirmed, payment_status=confirmed, slot stays booked
+- [x] On coach reject: set booking_status=rejected, payment_status=rejected, slot reverts to available
+- [x] On cancel (confirmed booking): set booking_status=cancelled, slot reverts to available
+- [x] Slot availability check before booking creation (race condition guard)
+
+### Seed / Demo Data
+- [x] Seed BestCricketAcademy facility record
+- [x] Seed 3 services with realistic pricing and durations
+- [x] Seed 14 days of time slots (6am–10am, 3pm–9pm) for all 3 services
+- [x] Seed sample bookings in all statuses (pending, confirmed, rejected, cancelled)
+
+### DB Helpers & Routers
+- [x] Update all DB helpers to use new schema fields
+- [x] Update tRPC routers to use facility_id in all queries
+- [x] Ensure adminList returns denormalized slot date/time from booking record
+
+### Frontend Updates
+- [x] Update BookingPage to use new slot availability_status
+- [x] Update AdminBookingDetail to show payment_status separately from booking_status
+- [x] Update AdminDashboard stats to reflect new status fields
