@@ -164,10 +164,10 @@ function makeAdminCtx(): TrpcContext {
   return {
     user: {
       id: 1,
-      openId: "admin-open-id",
+      passwordHash: "$2b$10$hashedpassword",
       name: "Coach Admin",
       email: "admin@bca.com",
-      loginMethod: "manus",
+      
       role: "admin",
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -182,10 +182,10 @@ function makeUserCtx(): TrpcContext {
   return {
     user: {
       id: 2,
-      openId: "user-open-id",
+      passwordHash: "$2b$10$hashedpassword",
       name: "Regular User",
       email: "user@example.com",
-      loginMethod: "manus",
+      
       role: "user",
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -363,10 +363,10 @@ describe("auth.logout", () => {
     const ctx: TrpcContext = {
       user: {
         id: 1,
-        openId: "admin-open-id",
+        passwordHash: "$2b$10$hashedpassword",
         name: "Coach Admin",
         email: "admin@bca.com",
-        loginMethod: "manus",
+        
         role: "admin",
         createdAt: new Date(),
         updatedAt: new Date(),

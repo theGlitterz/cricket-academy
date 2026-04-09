@@ -59,40 +59,26 @@ export async function getDb() {
 
 // ─── Users ────────────────────────────────────────────────────────────────────
 
-export async function upsertUser(user: InsertUser): Promise<void> {
-  if (!user.openId) throw new Error("User openId is required");
+/** Create a new admin user with a pre-hashed password. */
+export async function createUser(user: InsertUser): Promise<void> {
   const db = await getDb();
   if (!db) return;
-
-  const values: InsertUser = { openId: user.openId };
-  const updateSet: Record<string, unknown> = {};
-
-  for (const field of ["name", "email", "loginMethod"] as const) {
-    const v = user[field];
-    if (v !== undefined) {
-      values[field] = v ?? null;
-      updateSet[field] = v ?? null;
-    }
-  }
-  if (user.lastSignedIn !== undefined) {
-    values.lastSignedIn = user.lastSignedIn;
-    updateSet.lastSignedIn = user.lastSignedIn;
-  }
-  if (user.role !== undefined) {
-    values.role = user.role;
-    updateSet.role = user.role;
-  }
-  if (!values.lastSignedIn) values.lastSignedIn = new Date();
-  if (Object.keys(updateSet).length === 0) updateSet.lastSignedIn = new Date();
-
-  await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
+  await db.insert(users).values(user);
 }
 
-export async function getUserByOpenId(openId: string) {
+/** Look up a user by email address. */
+export async function getUserByEmail(email: string) {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
+  const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
   return result[0] ?? undefined;
+}
+
+/** Update lastSignedIn timestamp for a user. */
+export async function touchUserSignIn(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(users).set({ lastSignedIn: new Date() }).where(eq(users.id, id));
 }
 
 // ─── Facilities ───────────────────────────────────────────────────────────────

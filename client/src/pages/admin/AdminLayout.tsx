@@ -69,51 +69,13 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
     );
   }
 
-  // ── Not logged in ──
+  // ── Not logged in: redirect to /admin/login ──
   if (!isAuthenticated) {
+    const returnTo = encodeURIComponent(window.location.pathname);
+    window.location.href = `/admin/login?returnTo=${returnTo}`;
     return (
-      <div
-        className="min-h-screen flex flex-col items-center justify-center p-6 gap-5"
-        style={{ background: `linear-gradient(135deg, ${SIDEBAR_BG}, oklch(0.28 0.10 150))` }}
-      >
-        <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: "rgba(255,255,255,0.08)" }}>
-          <svg viewBox="0 0 40 40" fill="none" className="w-10 h-10" aria-hidden="true">
-            <circle cx="20" cy="20" r="18" fill="white" opacity="0.1" />
-            <circle cx="20" cy="20" r="18" stroke="white" strokeWidth="1.5" fill="none" opacity="0.5" />
-            <path d="M12 20 Q20 8 28 20" stroke="white" strokeWidth="2" fill="none" strokeLinecap="round" />
-            <path d="M12 20 Q20 32 28 20" stroke="white" strokeWidth="2" fill="none" strokeLinecap="round" />
-          </svg>
-        </div>
-        <div className="text-center">
-          <h1 className="text-xl font-bold text-white" style={{ fontFamily: "Syne, sans-serif" }}>
-            BestCricketAcademy
-          </h1>
-          <p className="text-sm mt-1" style={{ color: "rgba(255,255,255,0.50)" }}>Coach Admin Panel</p>
-        </div>
-        <div
-          className="rounded-2xl p-6 w-full max-w-sm text-center"
-          style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)" }}
-        >
-          <p className="text-white font-semibold mb-1">Sign in to continue</p>
-          <p className="text-sm mb-5" style={{ color: "rgba(255,255,255,0.55)" }}>
-            Only the registered coach can access this panel.
-          </p>
-          <a href={getLoginUrl()} className="block">
-            <Button
-              size="lg"
-              className="w-full h-12 rounded-xl font-semibold text-sm"
-              style={{ background: "oklch(0.78 0.17 85)", color: "oklch(0.14 0.01 260)" }}
-            >
-              Sign In with Manus
-            </Button>
-          </a>
-        </div>
-        <Link href="/">
-          <button className="text-sm flex items-center gap-1.5 transition-colors" style={{ color: "rgba(255,255,255,0.40)" }}>
-            <ExternalLink className="w-3.5 h-3.5" />
-            Back to booking site
-          </button>
-        </Link>
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
   }

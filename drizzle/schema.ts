@@ -12,16 +12,17 @@ import {
 // ─── Users ────────────────────────────────────────────────────────────────────
 
 /**
- * Core user table backing auth flow.
+ * Admin user table for the coach/admin panel.
+ * Self-hosted: credentials (email + bcrypt passwordHash) stored here.
  * role='admin' grants access to the admin panel.
  */
 export const users = mysqlTable("users", {
   id: int("id").autoincrement().primaryKey(),
-  openId: varchar("openId", { length: 64 }).notNull().unique(),
+  email: varchar("email", { length: 320 }).notNull().unique(),
+  /** bcrypt hash of the admin password */
+  passwordHash: varchar("passwordHash", { length: 256 }).notNull(),
   name: text("name"),
-  email: varchar("email", { length: 320 }),
-  loginMethod: varchar("loginMethod", { length: 64 }),
-  role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
+  role: mysqlEnum("role", ["user", "admin"]).default("admin").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),

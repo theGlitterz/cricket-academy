@@ -221,3 +221,35 @@
 - [x] Slot availability updates correctly (booked slot not shown as available)
 - [x] TypeScript: 0 errors
 - [x] All 20 tests passing
+
+## Self-Hosting Refactor: Remove Manus Platform Dependencies
+
+### Auth Replacement (Manus OAuth → Email + Password)
+- [x] Create `server/auth.ts` — standalone JWT-based auth helpers (hash check, sign token, verify token)
+- [x] Add `auth.adminLogin` tRPC procedure — checks ADMIN_EMAIL + ADMIN_PASSWORD env vars, issues JWT cookie
+- [x] Update `auth.me` procedure — verify JWT cookie without Manus SDK
+- [x] Update `auth.logout` procedure — clear cookie (already works, minor cleanup)
+- [x] Replace `server/_core/context.ts` — remove Manus SDK dependency, use standalone JWT verify
+- [x] Create `client/src/pages/admin/AdminLogin.tsx` — email + password login form
+- [x] Update `client/src/pages/admin/AdminLayout.tsx` — redirect to `/admin/login` instead of Manus OAuth
+- [x] Update `client/src/App.tsx` — add `/admin/login` route
+- [x] Update `client/src/_core/hooks/useAuth.ts` — remove Manus localStorage key
+- [x] Update `client/src/main.tsx` — redirect unauthorized to `/admin/login` not Manus OAuth
+- [x] Update `client/src/const.ts` — remove Manus OAuth URL builder
+
+### Storage Replacement (Manus S3 → Cloudinary)
+- [x] Replace `server/storage.ts` — implement Cloudinary upload via REST API
+- [x] Add `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` to env
+
+### Database Layer
+- [x] Update `drizzle/schema.ts` — simplify users table (remove openId, add email + passwordHash)
+- [x] Update `server/db.ts` — replace `getUserByOpenId` with `getUserByEmail`
+- [x] Run migration SQL for updated users table (0003_self_hosted_users.sql created)
+
+### Documentation
+- [x] Update `.env.example` — DEPLOYMENT.md created with full env var documentation
+- [x] Update `README.md` — DEPLOYMENT.md created with Vercel + PlanetScale guide
+
+### Tests
+- [x] Update `server/bookings.test.ts` — update mocked user shape (remove openId)
+- [x] Verify 20/20 tests still pass

@@ -11,6 +11,7 @@ import BookingPage from "./pages/BookingPage";
 import BookingStatusPage from "./pages/BookingStatusPage";
 
 // Admin pages
+import AdminLogin from "./pages/admin/AdminLogin";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminBookings from "./pages/admin/AdminBookings";
 import AdminBookingDetail from "./pages/admin/AdminBookingDetail";
@@ -28,6 +29,7 @@ function Router() {
       <Route path="/booking/:referenceId" component={BookingStatusPage} />
 
       {/* Admin routes */}
+      <Route path="/admin/login" component={AdminLogin} />
       <Route path="/admin" component={AdminDashboard} />
       <Route path="/admin/bookings" component={AdminBookings} />
       <Route path="/admin/bookings/:id" component={AdminBookingDetail} />

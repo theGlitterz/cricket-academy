@@ -6,8 +6,8 @@
  *   services  — public service listing + admin CRUD
  *   slots     — public availability + admin slot management
  *   bookings  — public booking creation/lookup + admin review
- *   system    — platform notifications (from template)
- *   auth      — login/logout (from template)
+ *   system    — health check
+ *   auth      — login/logout/me (standalone JWT, no OAuth)
  */
 
 import { TRPCError } from "@trpc/server";
@@ -18,6 +18,10 @@ import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { notifyOwner } from "./_core/notification";
 import { storagePut } from "./storage";
+import { signSession, verifySession } from "./_core/sdk";
+import { ENV } from "./_core/env";
+import { getUserByEmail, createUser, touchUserSignIn } from "./db";
+import bcrypt from "bcryptjs";
 import {
   FACILITY_ID,
   cancelBooking,
@@ -52,6 +56,97 @@ const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
     throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
   }
   return next({ ctx });
+});
+
+// ─── Auth router ──────────────────────────────────────────────────────────────
+
+const authRouter = router({
+  /**
+   * Public: get current session user.
+   * Returns null if not authenticated.
+   */
+  me: publicProcedure.query((opts) => opts.ctx.user ?? null),
+
+  /**
+   * Public: admin login with email + password.
+   * Sets a JWT session cookie on success.
+   */
+  adminLogin: publicProcedure
+    .input(
+      z.object({
+        email: z.string().email("Valid email required"),
+        password: z.string().min(1, "Password is required"),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const adminEmail = ENV.adminEmail;
+      const adminPassword = ENV.adminPassword;
+
+      if (!adminEmail || !adminPassword) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Admin credentials not configured on this server.",
+        });
+      }
+
+      // Case-insensitive email check
+      if (input.email.toLowerCase() !== adminEmail.toLowerCase()) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid email or password" });
+      }
+
+      // Password check — supports plain text (dev) and bcrypt hash (prod)
+      let passwordValid = false;
+      if (adminPassword.startsWith("$2")) {
+        passwordValid = await bcrypt.compare(input.password, adminPassword);
+      } else {
+        passwordValid = input.password === adminPassword;
+      }
+
+      if (!passwordValid) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid email or password" });
+      }
+
+      // Ensure admin user record exists in DB
+      let user = await getUserByEmail(input.email.toLowerCase());
+      if (!user) {
+        const hash = await bcrypt.hash(input.password, 10);
+        await createUser({
+          email: input.email.toLowerCase(),
+          passwordHash: hash,
+          name: "Admin",
+          role: "admin",
+        });
+        user = await getUserByEmail(input.email.toLowerCase());
+      }
+
+      if (!user) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to create user record" });
+      }
+
+      // Sign JWT and set cookie
+      const token = await signSession({
+        userId: user.id,
+        email: user.email,
+        role: user.role,
+      });
+
+      const cookieOptions = getSessionCookieOptions(ctx.req);
+      ctx.res.cookie(COOKIE_NAME, token, cookieOptions);
+
+      // Update last signed in
+      touchUserSignIn(user.id).catch(() => {});
+
+      return { ok: true, user: { id: user.id, email: user.email, name: user.name, role: user.role } };
+    }),
+
+  /**
+   * Public: logout — clears the session cookie.
+   */
+  logout: publicProcedure.mutation(({ ctx }) => {
+    const cookieOptions = getSessionCookieOptions(ctx.req);
+    ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+    return { success: true } as const;
+  }),
 });
 
 // ─── Facility router ──────────────────────────────────────────────────────────
@@ -204,7 +299,6 @@ const slotsRouter = router({
       })
     )
     .mutation(async ({ input }) => {
-      const service = await getServiceBySlug(""); // just to get service info
       const from = new Date(input.fromDate);
       const to = new Date(input.toDate);
       let created = 0;
@@ -322,7 +416,7 @@ const bookingsRouter = router({
       const booking = await getBookingById(input.bookingId);
       if (!booking) throw new TRPCError({ code: "NOT_FOUND", message: "Booking not found" });
       if (booking.bookingStatus !== "pending") {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Booking is not pending" });
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Cannot upload screenshot for a non-pending booking" });
       }
 
       const buffer = Buffer.from(input.fileBase64, "base64");
@@ -474,14 +568,7 @@ const bookingsRouter = router({
 
 export const appRouter = router({
   system: systemRouter,
-  auth: router({
-    me: publicProcedure.query((opts) => opts.ctx.user),
-    logout: publicProcedure.mutation(({ ctx }) => {
-      const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
-      return { success: true } as const;
-    }),
-  }),
+  auth: authRouter,
   facility: facilityRouter,
   services: servicesRouter,
   slots: slotsRouter,
