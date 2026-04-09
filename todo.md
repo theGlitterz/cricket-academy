@@ -65,7 +65,7 @@
 ## Prompts 2–5 (Planned — Scope for Future Prompts)
 - [x] Prompt 2: Data model, business logic, and booking rules — COMPLETE
 - [x] Prompt 3: Player-facing mobile booking experience — COMPLETE
-- [ ] Prompt 4: Slot management, settings, and UPI QR improvements (upcoming)
+- [x] Prompt 4: Coach/Admin Panel — COMPLETE
 - [ ] Prompt 5: Polish, testing, README, and deployment prep (upcoming)
 
 ## Prompt 2 of 5: Data Model, Business Logic & Booking Rules
@@ -134,3 +134,50 @@
 - [x] Error messages on failed API calls
 - [x] Smooth step transitions
 - [x] Mobile viewport meta and scroll behavior
+
+## Prompt 4 of 5: Coach/Admin Panel
+
+### Admin Login & Auth
+- [x] Admin login page: clean OAuth-based login with role check, redirect to dashboard
+- [x] AdminLayout: mobile hamburger menu + desktop sidebar, user info, logout
+- [x] Role guard: non-admin users see "Access Denied" with contact info
+
+### Admin Dashboard
+- [x] Stats row: Today / Pending / Confirmed / Total counts (live from DB)
+- [x] Today's bookings list: service, player, time, status badge, quick action
+- [x] Pending review section: bookings awaiting payment confirmation
+- [x] Quick action buttons: View All Bookings, Manage Slots
+
+### Booking Management
+- [x] AdminBookings: filterable list (All / Pending / Confirmed / Rejected / Cancelled)
+- [x] Booking cards: player name, WhatsApp, service, date/time, amount, status badge
+- [x] AdminBookingDetail: full booking info, payment screenshot preview (full-size tap)
+- [x] Confirm action: single tap confirm with loading state
+- [x] Reject action: reject with optional note (text input)
+- [x] Cancel action: cancel confirmed booking
+- [x] WhatsApp quick-contact link on each booking
+
+### Slot Management
+- [x] AdminSlots: view upcoming slots by service + date range
+- [x] Create single slot: service, date, start time, end time
+- [x] Bulk create: generate standard schedule (morning + evening) for N days
+- [x] Block/unblock slot toggle
+- [x] Slot status indicators: available / booked / blocked
+
+### Facility Settings
+- [x] Editable: facility name, coach name, coach WhatsApp, address, working hours
+- [x] Editable: UPI ID (text field)
+- [x] UPI QR code: upload image, preview current QR
+- [x] Payment instructions text field
+- [x] Save with success toast
+
+### New Procedures Added
+- [x] slots.getByDate — get all slots for a specific date and service
+- [x] slots.delete — delete a slot (with guard: cannot delete booked slots)
+- [x] bookings.getById — get full booking detail by ID (admin)
+- [x] bookings.todayBookings — get all bookings for today (admin)
+- [x] getAllBookings now joins services table to return serviceName
+
+### Quality
+- [x] TypeScript: 0 errors
+- [x] All 20 tests passing

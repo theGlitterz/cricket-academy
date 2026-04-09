@@ -41,6 +41,8 @@ import {
   updateBookingScreenshot,
   upsertFacility,
   upsertService,
+  getAllSlotsForDate,
+  deleteSlot,
 } from "./db";
 
 // ─── Admin guard ──────────────────────────────────────────────────────────────
@@ -229,6 +231,14 @@ const slotsRouter = router({
     }),
 
   /**
+   * Admin: get all slots for a single date across all services.
+   */
+  getByDate: adminProcedure
+    .input(z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }))
+    .query(async ({ input }) => {
+      return getAllSlotsForDate(input.date, FACILITY_ID);
+    }),
+  /**
    * Admin: block or unblock a slot.
    * Blocked slots cannot be booked.
    */
@@ -236,6 +246,15 @@ const slotsRouter = router({
     .input(z.object({ id: z.number().int(), blocked: z.boolean() }))
     .mutation(async ({ input }) => {
       await setSlotBlockStatus(input.id, input.blocked);
+      return { success: true };
+    }),
+  /**
+   * Admin: delete a slot (only if not booked).
+   */
+  delete: adminProcedure
+    .input(z.object({ id: z.number().int() }))
+    .mutation(async ({ input }) => {
+      await deleteSlot(input.id);
       return { success: true };
     }),
 });
@@ -338,6 +357,19 @@ const bookingsRouter = router({
       return getBookingsByWhatsApp(input.playerWhatsApp, FACILITY_ID);
     }),
 
+  /** Admin: get today's bookings */
+  todayBookings: adminProcedure.query(async () => {
+    const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+    return getAllBookings(FACILITY_ID, undefined, today);
+  }),
+  /** Admin: get a single booking by ID */
+  getById: adminProcedure
+    .input(z.object({ id: z.number().int() }))
+    .query(async ({ input }) => {
+      const booking = await getBookingById(input.id);
+      if (!booking) throw new TRPCError({ code: "NOT_FOUND", message: "Booking not found" });
+      return booking;
+    }),
   /** Admin: list all bookings with optional status filter */
   adminList: adminProcedure
     .input(

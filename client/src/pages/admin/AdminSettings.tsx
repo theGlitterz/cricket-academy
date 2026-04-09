@@ -6,8 +6,33 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { useState, useEffect, useRef } from "react";
-import { Save, Upload, Loader2, CheckCircle2 } from "lucide-react";
+import { Save, Upload, Loader2, CheckCircle2, Building2, Phone, MapPin, Clock, CreditCard, QrCode } from "lucide-react";
 import AdminLayout from "./AdminLayout";
+
+// ─── Section wrapper ──────────────────────────────────────────────────────────
+function Section({
+  icon: Icon,
+  title,
+  children,
+}: {
+  icon: React.ElementType;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Card className="border border-border rounded-2xl">
+      <CardContent className="p-4">
+        <div className="flex items-center gap-2 mb-4">
+          <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center">
+            <Icon className="w-3.5 h-3.5 text-primary" />
+          </div>
+          <p className="text-sm font-semibold text-foreground">{title}</p>
+        </div>
+        <div className="space-y-3">{children}</div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function AdminSettings() {
   const { data: facility, isLoading } = trpc.facility.get.useQuery();
@@ -110,113 +135,141 @@ export default function AdminSettings() {
 
   return (
     <AdminLayout title="Settings">
-      <div className="mb-5">
-        <h1 className="text-xl font-bold text-foreground" style={{ fontFamily: "Syne, sans-serif" }}>
-          Facility Settings
-        </h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          Configure your facility details and payment info
-        </p>
+      {/* ── Header ── */}
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <h1 className="text-xl font-bold text-foreground" style={{ fontFamily: "Syne, sans-serif" }}>
+            Facility Settings
+          </h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Configure your facility details and payment info
+          </p>
+        </div>
+        <Button
+          className="rounded-xl gap-2"
+          onClick={handleSave}
+          disabled={updateMutation.isPending}
+          size="sm"
+        >
+          {updateMutation.isPending ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Save className="w-4 h-4" />
+          )}
+          Save
+        </Button>
       </div>
 
-      {/* Facility Info */}
-      <Card className="border border-border mb-4">
-        <CardContent className="p-4 space-y-3">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-            Facility Information
-          </p>
+      <div className="space-y-4">
+        {/* ── Facility Info ── */}
+        <Section icon={Building2} title="Facility Info">
           <div className="space-y-1.5">
-            <Label>Facility Name</Label>
-            <Input value={form.facilityName} onChange={set("facilityName")} />
+            <Label className="text-xs text-muted-foreground">Facility Name</Label>
+            <Input value={form.facilityName} onChange={set("facilityName")} className="rounded-xl" />
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Coach Name</Label>
+              <Input
+                value={form.coachName}
+                onChange={set("coachName")}
+                placeholder="Coach Ramesh"
+                className="rounded-xl"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Working Hours</Label>
+              <Input
+                value={form.workingHours}
+                onChange={set("workingHours")}
+                placeholder="6AM–10AM, 3PM–9PM"
+                className="rounded-xl"
+              />
+            </div>
+          </div>
+        </Section>
+
+        {/* ── Contact ── */}
+        <Section icon={Phone} title="Contact">
           <div className="space-y-1.5">
-            <Label>Address</Label>
+            <Label className="text-xs text-muted-foreground">Coach WhatsApp</Label>
+            <Input
+              type="tel"
+              value={form.coachWhatsApp}
+              onChange={set("coachWhatsApp")}
+              placeholder="+919876543210"
+              className="rounded-xl"
+            />
+            <p className="text-[11px] text-muted-foreground">Include country code. Players will contact you on this number.</p>
+          </div>
+        </Section>
+
+        {/* ── Location ── */}
+        <Section icon={MapPin} title="Location">
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Address</Label>
             <Textarea
               value={form.address}
               onChange={set("address")}
               rows={2}
               placeholder="Full address shown on booking page"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>Coach Name</Label>
-              <Input
-                value={form.coachName}
-                onChange={set("coachName")}
-                placeholder="Coach Ramesh"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Coach WhatsApp</Label>
-              <Input
-                type="tel"
-                value={form.coachWhatsApp}
-                onChange={set("coachWhatsApp")}
-                placeholder="+91 98765 43210"
-              />
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label>Working Hours</Label>
-            <Input
-              value={form.workingHours}
-              onChange={set("workingHours")}
-              placeholder="e.g. 6:00 AM – 9:00 PM"
+              className="rounded-xl resize-none"
             />
           </div>
           <div className="space-y-1.5">
-            <Label>Google Maps URL</Label>
+            <Label className="text-xs text-muted-foreground">Google Maps URL</Label>
             <Input
               value={form.googleMapsUrl}
               onChange={set("googleMapsUrl")}
               placeholder="https://maps.google.com/..."
+              className="rounded-xl"
             />
           </div>
-        </CardContent>
-      </Card>
+        </Section>
 
-      {/* Payment Settings */}
-      <Card className="border border-border mb-4">
-        <CardContent className="p-4 space-y-3">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-            Payment Settings
-          </p>
+        {/* ── Payment / UPI ── */}
+        <Section icon={CreditCard} title="Payment — UPI">
           <div className="space-y-1.5">
-            <Label>UPI ID</Label>
+            <Label className="text-xs text-muted-foreground">UPI ID</Label>
             <Input
               value={form.upiId}
               onChange={set("upiId")}
               placeholder="e.g. coach@upi or 9876543210@paytm"
+              className="rounded-xl"
             />
           </div>
           <div className="space-y-1.5">
-            <Label>Payment Instructions</Label>
+            <Label className="text-xs text-muted-foreground">Payment Instructions</Label>
             <Textarea
               value={form.paymentInstructions}
               onChange={set("paymentInstructions")}
               rows={2}
               placeholder="e.g. Pay and upload screenshot to confirm your booking"
+              className="rounded-xl resize-none"
             />
           </div>
+        </Section>
 
-          {/* UPI QR Code */}
-          <div className="space-y-2">
-            <Label>UPI QR Code</Label>
+        {/* ── UPI QR Code ── */}
+        <Section icon={QrCode} title="UPI QR Code">
+          <div className="flex flex-col items-center gap-3">
             {qrUrl ? (
-              <div className="space-y-2">
+              <div className="relative">
                 <img
                   src={qrUrl}
                   alt="UPI QR Code"
-                  className="w-32 h-32 object-contain rounded-lg border border-border bg-muted"
+                  className="w-36 h-36 object-contain rounded-xl border border-border bg-white p-1"
                 />
-                <p className="text-xs text-green-600 flex items-center gap-1">
+                <p className="text-xs text-green-600 flex items-center gap-1 mt-1 justify-center">
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   QR code uploaded
                 </p>
               </div>
             ) : (
-              <p className="text-xs text-muted-foreground">No QR code uploaded yet.</p>
+              <div className="w-36 h-36 rounded-xl border-2 border-dashed border-border flex flex-col items-center justify-center bg-muted/30">
+                <QrCode className="w-8 h-8 text-muted-foreground/40 mb-1" />
+                <p className="text-[11px] text-muted-foreground text-center px-2">No QR uploaded yet</p>
+              </div>
             )}
             <input
               ref={qrRef}
@@ -227,33 +280,33 @@ export default function AdminSettings() {
             />
             <Button
               variant="outline"
-              size="sm"
+              className="rounded-xl w-full"
               onClick={() => qrRef.current?.click()}
-              disabled={qrUploading}
+              disabled={qrUploading || uploadQrMutation.isPending}
             >
-              {qrUploading ? (
-                <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />Uploading...</>
+              {qrUploading || uploadQrMutation.isPending ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Uploading...</>
               ) : (
-                <><Upload className="w-3.5 h-3.5 mr-1.5" />{qrUrl ? "Replace QR Code" : "Upload QR Code"}</>
+                <><Upload className="w-4 h-4 mr-2" />{qrUrl ? "Replace QR Code" : "Upload QR Code"}</>
               )}
             </Button>
+            <p className="text-[11px] text-muted-foreground text-center">Upload a clear image of your UPI QR code. Max 2MB.</p>
           </div>
-        </CardContent>
-      </Card>
+        </Section>
 
-      {/* Save Button */}
-      <Button
-        className="w-full"
-        size="lg"
-        onClick={handleSave}
-        disabled={updateMutation.isPending}
-      >
-        {updateMutation.isPending ? (
-          <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving...</>
-        ) : (
-          <><Save className="w-4 h-4 mr-2" />Save Settings</>
-        )}
-      </Button>
+        {/* ── Save Button (bottom) ── */}
+        <Button
+          className="w-full rounded-xl h-12 text-base font-semibold"
+          onClick={handleSave}
+          disabled={updateMutation.isPending}
+        >
+          {updateMutation.isPending ? (
+            <><Loader2 className="w-5 h-5 animate-spin mr-2" />Saving...</>
+          ) : (
+            <><Save className="w-5 h-5 mr-2" />Save All Settings</>
+          )}
+        </Button>
+      </div>
     </AdminLayout>
   );
 }

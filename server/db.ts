@@ -227,6 +227,30 @@ export async function getSlotsForDateRange(
     .orderBy(slots.date, slots.startTime);
 }
 
+/** Admin: get all slots for a specific date across all services. */
+export async function getAllSlotsForDate(
+  date: string,
+  facilityId = FACILITY_ID
+): Promise<Slot[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(slots)
+    .where(and(eq(slots.facilityId, facilityId), eq(slots.date, date)))
+    .orderBy(slots.serviceId, slots.startTime);
+}
+
+/** Admin: delete a slot by id (only if not booked). */
+export async function deleteSlot(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  const slot = await getSlotById(id);
+  if (!slot) throw new Error("Slot not found");
+  if (slot.availabilityStatus === "booked") throw new Error("Cannot delete a booked slot");
+  await db.delete(slots).where(eq(slots.id, id));
+}
+
 /** Get a slot by id. */
 export async function getSlotById(id: number): Promise<Slot | undefined> {
   const db = await getDb();
@@ -403,20 +427,24 @@ export async function getBookingsByWhatsApp(
     .orderBy(desc(bookings.createdAt));
 }
 
-/** Admin: list all bookings with optional status filter. */
+/** Admin: list all bookings with optional status filter, joined with service name. */
 export async function getAllBookings(
   facilityId = FACILITY_ID,
-  statusFilter?: "pending" | "confirmed" | "rejected" | "cancelled"
-): Promise<Booking[]> {
+  statusFilter?: "pending" | "confirmed" | "rejected" | "cancelled",
+  dateFilter?: string // YYYY-MM-DD
+): Promise<(Booking & { serviceName: string | null })[]> {
   const db = await getDb();
   if (!db) return [];
   const conditions = [eq(bookings.facilityId, facilityId)];
   if (statusFilter) conditions.push(eq(bookings.bookingStatus, statusFilter));
-  return db
-    .select()
+  if (dateFilter) conditions.push(eq(bookings.bookingDate, dateFilter));
+  const rows = await db
+    .select({ booking: bookings, serviceName: services.name })
     .from(bookings)
+    .leftJoin(services, eq(bookings.serviceId, services.id))
     .where(and(...conditions))
     .orderBy(desc(bookings.createdAt));
+  return rows.map((r) => ({ ...r.booking, serviceName: r.serviceName ?? null }));
 }
 
 /** Admin: get booking stats (counts by status). */

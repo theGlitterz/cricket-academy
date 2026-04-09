@@ -1,139 +1,126 @@
+/**
+ * AdminDashboard — Coach's home view.
+ * Shows today's bookings, live stats, pending review list, and quick actions.
+ */
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { getLoginUrl } from "@/const";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Link } from "wouter";
 import {
-  CalendarDays,
+  Clock,
   CheckCircle2,
   XCircle,
-  Clock,
-  Settings,
-  LogOut,
-  ChevronRight,
   BarChart3,
-  Users,
+  ChevronRight,
+  CalendarDays,
+  Settings,
+  Loader2,
 } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
 import AdminLayout from "./AdminLayout";
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const STATUS_CSS: Record<string, string> = {
+  pending: "status-pending",
+  confirmed: "status-confirmed",
+  rejected: "status-rejected",
+  cancelled: "status-cancelled",
+};
+
+const STATUS_LABEL: Record<string, string> = {
+  pending: "Pending",
+  confirmed: "Confirmed",
+  rejected: "Rejected",
+  cancelled: "Cancelled",
+};
+
+function formatTime(t: string | null | undefined) {
+  if (!t) return "";
+  const [h, m] = t.split(":").map(Number);
+  const ampm = (h ?? 0) >= 12 ? "PM" : "AM";
+  const hour = (h ?? 0) % 12 || 12;
+  return `${hour}:${String(m).padStart(2, "0")} ${ampm}`;
+}
+
+function formatDate(d: string | null | undefined) {
+  if (!d) return "";
+  return new Date(d + "T00:00:00").toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+  });
+}
+
+// ─── Stat Card ────────────────────────────────────────────────────────────────
 function StatCard({
   label,
   value,
   icon,
   colorClass,
+  urgent,
 }: {
   label: string;
   value: number;
   icon: React.ReactNode;
   colorClass: string;
+  urgent?: boolean;
 }) {
   return (
-    <Card className="border border-border">
-      <CardContent className="p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs text-muted-foreground">{label}</p>
-            <p className="text-2xl font-bold text-foreground mt-0.5">{value}</p>
-          </div>
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${colorClass}`}>
-            {icon}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+    <div
+      className={`rounded-2xl p-4 flex items-center gap-3 bg-white ${urgent && value > 0 ? "ring-2 ring-yellow-400" : ""}`}
+      style={{ border: "1px solid oklch(0.92 0.01 145)" }}
+    >
+      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${colorClass}`}>
+        {icon}
+      </div>
+      <div>
+        <p className="text-2xl font-bold text-foreground leading-none">{value}</p>
+        <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
+      </div>
+    </div>
   );
 }
 
+// ─── Component ────────────────────────────────────────────────────────────────
 export default function AdminDashboard() {
-  const { user, loading, isAuthenticated, logout } = useAuth();
+  const { user } = useAuth();
+  const { data: stats, isLoading: statsLoading } = trpc.bookings.stats.useQuery();
+  const { data: pendingBookings, isLoading: pendingLoading } = trpc.bookings.adminList.useQuery({ status: "pending" });
+  const { data: todayBookings, isLoading: todayLoading } = trpc.bookings.todayBookings.useQuery();
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-6 gap-4">
-        <span className="text-4xl">🏏</span>
-        <h1 className="text-xl font-bold text-foreground" style={{ fontFamily: "Syne, sans-serif" }}>
-          Admin Login Required
-        </h1>
-        <p className="text-sm text-muted-foreground text-center">
-          Sign in to access the BestCricketAcademy admin panel.
-        </p>
-        <a href={getLoginUrl()}>
-          <Button size="lg" className="w-full max-w-xs">
-            Sign In
-          </Button>
-        </a>
-        <Link href="/">
-          <Button variant="ghost" size="sm">
-            ← Back to Home
-          </Button>
-        </Link>
-      </div>
-    );
-  }
-
-  if (user?.role !== "admin") {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-6 gap-4">
-        <XCircle className="w-12 h-12 text-destructive" />
-        <h1 className="text-xl font-bold text-foreground">Access Denied</h1>
-        <p className="text-sm text-muted-foreground text-center">
-          Your account does not have admin privileges.
-        </p>
-        <Button variant="outline" onClick={logout}>
-          Sign Out
-        </Button>
-        <Link href="/">
-          <Button variant="ghost" size="sm">← Back to Home</Button>
-        </Link>
-      </div>
-    );
-  }
-
-  return <AdminDashboardContent />;
-}
-
-function AdminDashboardContent() {
-  const { user, logout } = useAuth();
-  const { data: stats, isLoading } = trpc.bookings.stats.useQuery();
-  const { data: recentBookings } = trpc.bookings.adminList.useQuery({
-    status: "pending",
+  const coachFirstName = user?.name?.split(" ")[0] ?? "Coach";
+  const today = new Date().toLocaleDateString("en-IN", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
   });
 
   return (
     <AdminLayout title="Dashboard">
-      {/* Welcome */}
-      <div className="mb-6">
+      {/* ── Header ── */}
+      <div className="mb-5">
+        <p className="text-xs text-muted-foreground mb-0.5">{today}</p>
         <h1 className="text-xl font-bold text-foreground" style={{ fontFamily: "Syne, sans-serif" }}>
-          Welcome back, {user?.name?.split(" ")[0] ?? "Coach"} 👋
+          Welcome back, {coachFirstName} 👋
         </h1>
         <p className="text-sm text-muted-foreground mt-0.5">
           Here's what's happening at BestCricketAcademy
         </p>
       </div>
 
-      {/* Stats Grid */}
-      {isLoading ? (
+      {/* ── Stats Grid ── */}
+      {statsLoading ? (
         <div className="grid grid-cols-2 gap-3 mb-6">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-20 rounded-xl bg-muted animate-pulse" />
+            <div key={i} className="h-20 rounded-2xl bg-muted animate-pulse" />
           ))}
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-3 mb-6">
           <StatCard
-            label="Pending"
+            label="Pending Review"
             value={stats?.pending ?? 0}
             icon={<Clock className="w-5 h-5 text-yellow-600" />}
             colorClass="bg-yellow-100"
+            urgent
           />
           <StatCard
             label="Confirmed"
@@ -148,7 +135,7 @@ function AdminDashboardContent() {
             colorClass="bg-red-100"
           />
           <StatCard
-            label="Total"
+            label="Total Bookings"
             value={stats?.total ?? 0}
             icon={<BarChart3 className="w-5 h-5 text-primary" />}
             colorClass="bg-primary/10"
@@ -156,85 +143,169 @@ function AdminDashboardContent() {
         </div>
       )}
 
-      {/* Quick Actions */}
-      <div className="space-y-2 mb-6">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-          Quick Actions
-        </p>
-        {[
-          {
-            href: "/admin/bookings",
-            icon: <CalendarDays className="w-5 h-5 text-primary" />,
-            label: "Manage Bookings",
-            desc: `${stats?.pending ?? 0} pending review`,
-          },
-          {
-            href: "/admin/slots",
-            icon: <Clock className="w-5 h-5 text-primary" />,
-            label: "Manage Slots",
-            desc: "Create or block time slots",
-          },
-          {
-            href: "/admin/settings",
-            icon: <Settings className="w-5 h-5 text-primary" />,
-            label: "Facility Settings",
-            desc: "UPI, contact, working hours",
-          },
-        ].map(({ href, icon, label, desc }) => (
-          <Link key={href} href={href}>
-            <Card className="border border-border hover:border-primary/40 transition-colors cursor-pointer active:scale-[0.98]">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                    {icon}
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold text-foreground">{label}</p>
-                    <p className="text-xs text-muted-foreground">{desc}</p>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                </div>
-              </CardContent>
-            </Card>
+      {/* ── Pending Review Section ── */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              Needs Your Review
+            </p>
+            {(pendingBookings?.length ?? 0) > 0 && (
+              <span className="bg-yellow-400 text-yellow-900 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                {pendingBookings?.length}
+              </span>
+            )}
+          </div>
+          <Link href="/admin/bookings">
+            <span className="text-xs text-primary font-medium">View all →</span>
           </Link>
-        ))}
+        </div>
+
+        {pendingLoading ? (
+          <div className="space-y-2">
+            {[1, 2].map((i) => <div key={i} className="h-16 rounded-2xl bg-muted animate-pulse" />)}
+          </div>
+        ) : pendingBookings && pendingBookings.length > 0 ? (
+          <div className="space-y-2">
+            {pendingBookings.slice(0, 4).map((b) => (
+              <Link key={b.id} href={`/admin/bookings/${b.id}`}>
+                <Card
+                  className="cursor-pointer active:scale-[0.98] transition-all"
+                  style={{ border: "1px solid oklch(0.88 0.08 85)", background: "oklch(0.99 0.02 85)" }}
+                >
+                  <CardContent className="p-3.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-semibold text-foreground truncate">{b.playerName}</p>
+                          <span className="text-[10px] status-pending px-1.5 py-0.5 rounded-full shrink-0">
+                            Pending
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                          {b.serviceName ?? "Service"} · {formatDate(b.bookingDate)} {b.startTime ? formatTime(b.startTime) : ""}
+                        </p>
+                        <p className="text-[10px] font-mono text-muted-foreground/60 mt-0.5">{b.referenceId}</p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0 ml-2">
+                        <p className="text-sm font-bold text-primary">
+                          ₹{parseFloat(String(b.amount)).toLocaleString("en-IN")}
+                        </p>
+                        <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-border p-6 text-center">
+            <CheckCircle2 className="w-8 h-8 text-green-500 mx-auto mb-2" />
+            <p className="text-sm font-medium text-foreground">All caught up!</p>
+            <p className="text-xs text-muted-foreground mt-0.5">No pending bookings to review.</p>
+          </div>
+        )}
       </div>
 
-      {/* Pending Bookings Preview */}
-      {recentBookings && recentBookings.length > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-              Pending Bookings
-            </p>
-            <Link href="/admin/bookings">
-              <span className="text-xs text-primary">View all →</span>
-            </Link>
+      {/* ── Today's Sessions ── */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            Today's Sessions
+          </p>
+          <Link href="/admin/bookings">
+            <span className="text-xs text-primary font-medium">All bookings →</span>
+          </Link>
+        </div>
+
+        {todayLoading ? (
+          <div className="space-y-2">
+            {[1, 2].map((i) => <div key={i} className="h-16 rounded-2xl bg-muted animate-pulse" />)}
           </div>
-          {recentBookings.slice(0, 3).map((booking) => (
-            <Link key={booking.id} href={`/admin/bookings/${booking.id}`}>
-              <Card className="border border-border hover:border-primary/40 transition-colors cursor-pointer">
-                <CardContent className="p-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">{booking.playerName}</p>
-                      <p className="text-xs text-muted-foreground font-mono">{booking.referenceId}</p>
+        ) : todayBookings && todayBookings.length > 0 ? (
+          <div className="space-y-2">
+            {todayBookings.map((b) => (
+              <Link key={b.id} href={`/admin/bookings/${b.id}`}>
+                <Card className="border border-border hover:border-primary/30 transition-colors cursor-pointer active:scale-[0.98]">
+                  <CardContent className="p-3.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-semibold text-foreground truncate">{b.playerName}</p>
+                          <span className={`text-[10px] ${STATUS_CSS[b.bookingStatus] ?? ""} px-1.5 py-0.5 rounded-full shrink-0`}>
+                            {STATUS_LABEL[b.bookingStatus] ?? b.bookingStatus}
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {b.serviceName ?? "Service"} · {b.startTime ? formatTime(b.startTime) : ""}{b.endTime ? ` – ${formatTime(b.endTime)}` : ""}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0 ml-2">
+                        <p className="text-sm font-bold text-primary">
+                          ₹{parseFloat(String(b.amount)).toLocaleString("en-IN")}
+                        </p>
+                        <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm font-bold text-primary">
-                        ₹{parseFloat(String(booking.amount)).toLocaleString("en-IN")}
-                      </p>
-                      <span className="text-xs status-pending px-2 py-0.5 rounded-full">
-                        Pending
-                      </span>
+                  </CardContent>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-border p-5 text-center">
+            <CalendarDays className="w-7 h-7 text-muted-foreground/40 mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground">No sessions booked for today.</p>
+          </div>
+        )}
+      </div>
+
+      {/* ── Quick Actions ── */}
+      <div>
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+          Quick Actions
+        </p>
+        <div className="space-y-2">
+          {[
+            {
+              href: "/admin/bookings",
+              icon: <CalendarDays className="w-5 h-5 text-primary" />,
+              label: "Manage All Bookings",
+              desc: `${stats?.pending ?? 0} pending · ${stats?.confirmed ?? 0} confirmed`,
+            },
+            {
+              href: "/admin/slots",
+              icon: <Clock className="w-5 h-5 text-primary" />,
+              label: "Manage Slots",
+              desc: "Create or block time slots",
+            },
+            {
+              href: "/admin/settings",
+              icon: <Settings className="w-5 h-5 text-primary" />,
+              label: "Facility Settings",
+              desc: "UPI, QR code, contact info",
+            },
+          ].map(({ href, icon, label, desc }) => (
+            <Link key={href} href={href}>
+              <Card className="border border-border hover:border-primary/40 transition-colors cursor-pointer active:scale-[0.98]">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                      {icon}
                     </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-foreground">{label}</p>
+                      <p className="text-xs text-muted-foreground">{desc}</p>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
                   </div>
                 </CardContent>
               </Card>
             </Link>
           ))}
         </div>
-      )}
+      </div>
     </AdminLayout>
   );
 }

@@ -1,7 +1,12 @@
+/**
+ * AdminLayout — shared wrapper for all admin pages.
+ * Dark cricket-green sidebar on desktop, slide-down drawer on mobile.
+ * Auth-gated: requires logged-in user with role=admin.
+ */
 import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
-import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "wouter";
+import { useState } from "react";
 import {
   LayoutDashboard,
   CalendarDays,
@@ -10,9 +15,13 @@ import {
   LogOut,
   Menu,
   X,
+  ExternalLink,
+  Loader2,
+  ShieldAlert,
 } from "lucide-react";
-import { useState } from "react";
+import { Button } from "@/components/ui/button";
 
+// ─── Nav Items ────────────────────────────────────────────────────────────────
 const NAV_ITEMS = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/bookings", label: "Bookings", icon: CalendarDays },
@@ -20,153 +29,269 @@ const NAV_ITEMS = [
   { href: "/admin/settings", label: "Settings", icon: Settings },
 ];
 
-export default function AdminLayout({
-  children,
-  title,
-}: {
+// ─── Sidebar background color ─────────────────────────────────────────────────
+const SIDEBAR_BG = "oklch(0.20 0.08 145)";
+const SIDEBAR_ACTIVE = "oklch(0.38 0.13 145)";
+const SIDEBAR_TEXT = "rgba(255,255,255,0.65)";
+const SIDEBAR_TEXT_ACTIVE = "white";
+const SIDEBAR_BORDER = "rgba(255,255,255,0.08)";
+
+// ─── Cricket ball SVG logo ────────────────────────────────────────────────────
+function CricketLogo() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5" aria-hidden="true">
+      <circle cx="12" cy="12" r="10" fill="white" opacity="0.15" />
+      <circle cx="12" cy="12" r="10" stroke="white" strokeWidth="1.5" fill="none" />
+      <path d="M7 12 Q12 4 17 12" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+      <path d="M7 12 Q12 20 17 12" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+// ─── Props ────────────────────────────────────────────────────────────────────
+interface AdminLayoutProps {
   children: React.ReactNode;
   title?: string;
-}) {
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
+export default function AdminLayout({ children, title }: AdminLayoutProps) {
   const { user, loading, isAuthenticated, logout } = useAuth();
   const [location] = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
 
+  // ── Loading state ──
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
   }
 
+  // ── Not logged in ──
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-6 gap-4 bg-background">
-        <span className="text-4xl">🏏</span>
-        <h1 className="text-xl font-bold text-foreground" style={{ fontFamily: "Syne, sans-serif" }}>
-          Admin Login Required
-        </h1>
-        <p className="text-sm text-muted-foreground text-center">
-          Sign in to access the BestCricketAcademy admin panel.
-        </p>
-        <a href={getLoginUrl()}>
-          <Button size="lg" className="w-full max-w-xs">Sign In</Button>
-        </a>
+      <div
+        className="min-h-screen flex flex-col items-center justify-center p-6 gap-5"
+        style={{ background: `linear-gradient(135deg, ${SIDEBAR_BG}, oklch(0.28 0.10 150))` }}
+      >
+        <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: "rgba(255,255,255,0.08)" }}>
+          <svg viewBox="0 0 40 40" fill="none" className="w-10 h-10" aria-hidden="true">
+            <circle cx="20" cy="20" r="18" fill="white" opacity="0.1" />
+            <circle cx="20" cy="20" r="18" stroke="white" strokeWidth="1.5" fill="none" opacity="0.5" />
+            <path d="M12 20 Q20 8 28 20" stroke="white" strokeWidth="2" fill="none" strokeLinecap="round" />
+            <path d="M12 20 Q20 32 28 20" stroke="white" strokeWidth="2" fill="none" strokeLinecap="round" />
+          </svg>
+        </div>
+        <div className="text-center">
+          <h1 className="text-xl font-bold text-white" style={{ fontFamily: "Syne, sans-serif" }}>
+            BestCricketAcademy
+          </h1>
+          <p className="text-sm mt-1" style={{ color: "rgba(255,255,255,0.50)" }}>Coach Admin Panel</p>
+        </div>
+        <div
+          className="rounded-2xl p-6 w-full max-w-sm text-center"
+          style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)" }}
+        >
+          <p className="text-white font-semibold mb-1">Sign in to continue</p>
+          <p className="text-sm mb-5" style={{ color: "rgba(255,255,255,0.55)" }}>
+            Only the registered coach can access this panel.
+          </p>
+          <a href={getLoginUrl()} className="block">
+            <Button
+              size="lg"
+              className="w-full h-12 rounded-xl font-semibold text-sm"
+              style={{ background: "oklch(0.78 0.17 85)", color: "oklch(0.14 0.01 260)" }}
+            >
+              Sign In with Manus
+            </Button>
+          </a>
+        </div>
         <Link href="/">
-          <Button variant="ghost" size="sm">← Back to Home</Button>
+          <button className="text-sm flex items-center gap-1.5 transition-colors" style={{ color: "rgba(255,255,255,0.40)" }}>
+            <ExternalLink className="w-3.5 h-3.5" />
+            Back to booking site
+          </button>
         </Link>
       </div>
     );
   }
 
+  // ── Not admin ──
   if (user?.role !== "admin") {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-6 gap-4 bg-background">
-        <h1 className="text-xl font-bold text-foreground">Access Denied</h1>
-        <p className="text-sm text-muted-foreground text-center">
-          Your account does not have admin privileges.
-        </p>
-              <Button variant="outline" onClick={logout}>Sign Out</Button>
-        <Link href="/"><Button variant="ghost" size="sm">← Back to Home</Button></Link>
+        <div className="w-14 h-14 rounded-2xl bg-red-100 flex items-center justify-center">
+          <ShieldAlert className="w-7 h-7 text-red-500" />
+        </div>
+        <div className="text-center">
+          <h1 className="text-lg font-bold text-foreground">Access Denied</h1>
+          <p className="text-sm text-muted-foreground mt-1 max-w-xs">
+            Your account ({user?.email ?? user?.name}) does not have admin privileges.
+            Contact the facility owner to get access.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => logout()}>Sign Out</Button>
+          <Link href="/"><Button variant="ghost" size="sm">← Back to Home</Button></Link>
+        </div>
       </div>
     );
   }
 
+  // ── Admin shell ──
+  const currentNav = NAV_ITEMS.find((n) => n.href === location);
+
   return (
-    <div className="min-h-screen bg-background">
-      {/* Top Bar */}
-      <header className="sticky top-0 z-40 bg-sidebar text-sidebar-foreground border-b border-sidebar-border">
-        <div className="container flex items-center justify-between h-14">
-          <div className="flex items-center gap-2">
-            <span className="text-xl">🏏</span>
+    <div className="min-h-screen bg-background flex flex-col">
+      {/* ── Top Bar ── */}
+      <header
+        className="sticky top-0 z-50 flex items-center justify-between px-4 h-14"
+        style={{ background: SIDEBAR_BG, borderBottom: `1px solid ${SIDEBAR_BORDER}` }}
+      >
+        {/* Logo + Brand */}
+        <Link href="/admin">
+          <div className="flex items-center gap-2.5 cursor-pointer">
+            <CricketLogo />
             <div>
-              <p className="text-sm font-bold" style={{ fontFamily: "Syne, sans-serif" }}>
+              <p className="text-xs font-bold text-white leading-none" style={{ fontFamily: "Syne, sans-serif" }}>
                 BCA Admin
+              </p>
+              <p className="text-[10px] leading-none mt-0.5" style={{ color: "rgba(255,255,255,0.40)" }}>
+                {title ?? currentNav?.label ?? "Dashboard"}
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-sidebar-foreground/70 hidden sm:block">
-              {user?.name}
-            </span>
-            <button
-              onClick={() => setMenuOpen(!menuOpen)}
-              className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-sidebar-accent transition-colors sm:hidden"
-            >
-              {menuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
-            </button>
-          </div>
+        </Link>
+
+        {/* Desktop: user info + sign out */}
+        <div className="hidden sm:flex items-center gap-3">
+          <span className="text-xs" style={{ color: "rgba(255,255,255,0.50)" }}>{user?.name}</span>
+          <button
+            onClick={() => logout()}
+            className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg transition-colors"
+            style={{ color: "rgba(255,255,255,0.50)" }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.08)"; (e.currentTarget as HTMLButtonElement).style.color = "white"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.50)"; }}
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            Sign Out
+          </button>
         </div>
 
-        {/* Mobile Nav Drawer */}
-        {menuOpen && (
-          <div className="sm:hidden bg-sidebar border-t border-sidebar-border">
-            <nav className="container py-2 space-y-1">
-              {NAV_ITEMS.map(({ href, label, icon: Icon }) => (
+        {/* Mobile: hamburger */}
+        <button
+          onClick={() => setMenuOpen(!menuOpen)}
+          className="sm:hidden w-9 h-9 flex items-center justify-center rounded-xl transition-colors"
+          style={{ color: "white" }}
+          aria-label="Toggle menu"
+        >
+          {menuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+        </button>
+      </header>
+
+      {/* ── Mobile Nav Drawer ── */}
+      {menuOpen && (
+        <div
+          className="sm:hidden fixed top-14 left-0 right-0 z-40"
+          style={{ background: "oklch(0.22 0.08 145)", borderBottom: `1px solid ${SIDEBAR_BORDER}` }}
+        >
+          <nav className="px-3 py-2 space-y-0.5">
+            {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+              const isActive = location === href;
+              return (
                 <Link key={href} href={href}>
                   <button
                     onClick={() => setMenuOpen(false)}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
-                      location === href
-                        ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold"
-                        : "text-sidebar-foreground hover:bg-sidebar-accent/50"
-                    }`}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors"
+                    style={{
+                      background: isActive ? SIDEBAR_ACTIVE : "transparent",
+                      color: isActive ? SIDEBAR_TEXT_ACTIVE : SIDEBAR_TEXT,
+                      fontWeight: isActive ? 600 : 400,
+                    }}
                   >
                     <Icon className="w-4 h-4" />
                     {label}
                   </button>
                 </Link>
-              ))}
+              );
+            })}
+            <div className="pt-1 mt-1" style={{ borderTop: `1px solid ${SIDEBAR_BORDER}` }}>
               <button
-                onClick={() => logout()}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-sidebar-foreground hover:bg-sidebar-accent/50 transition-colors"
+                onClick={() => { setMenuOpen(false); logout(); }}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors"
+                style={{ color: "rgba(255,255,255,0.45)" }}
               >
                 <LogOut className="w-4 h-4" />
-                Sign Out
+                Sign Out ({user?.name})
               </button>
-            </nav>
-          </div>
-        )}
-      </header>
-
-      <div className="flex">
-        {/* Desktop Sidebar */}
-        <aside className="hidden sm:flex flex-col w-56 min-h-[calc(100vh-56px)] bg-sidebar text-sidebar-foreground border-r border-sidebar-border sticky top-14 shrink-0">
-          <nav className="flex-1 p-3 space-y-1">
-            {NAV_ITEMS.map(({ href, label, icon: Icon }) => (
-              <Link key={href} href={href}>
+              <Link href="/">
                 <button
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
-                    location === href
-                      ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold"
-                      : "text-sidebar-foreground hover:bg-sidebar-accent/50"
-                  }`}
+                  onClick={() => setMenuOpen(false)}
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-colors"
+                  style={{ color: "rgba(255,255,255,0.30)" }}
                 >
-                  <Icon className="w-4 h-4" />
-                  {label}
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  View Booking Site
                 </button>
               </Link>
-            ))}
+            </div>
           </nav>
-          <div className="p-3 border-t border-sidebar-border">
+        </div>
+      )}
+
+      {/* ── Body: Sidebar + Content ── */}
+      <div className="flex flex-1">
+        {/* Desktop Sidebar */}
+        <aside
+          className="hidden sm:flex flex-col w-56 min-h-[calc(100vh-56px)] sticky top-14 shrink-0"
+          style={{ background: SIDEBAR_BG, borderRight: `1px solid ${SIDEBAR_BORDER}` }}
+        >
+          <nav className="flex-1 p-3 space-y-0.5">
+            {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+              const isActive = location === href;
+              return (
+                <Link key={href} href={href}>
+                  <button
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-150"
+                    style={{
+                      background: isActive ? SIDEBAR_ACTIVE : "transparent",
+                      color: isActive ? SIDEBAR_TEXT_ACTIVE : SIDEBAR_TEXT,
+                      fontWeight: isActive ? 600 : 400,
+                    }}
+                  >
+                    <Icon className="w-4 h-4" />
+                    {label}
+                  </button>
+                </Link>
+              );
+            })}
+          </nav>
+          <div className="p-3 space-y-0.5" style={{ borderTop: `1px solid ${SIDEBAR_BORDER}` }}>
+            <Link href="/">
+              <button
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-colors"
+                style={{ color: "rgba(255,255,255,0.30)" }}
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                View Booking Site
+              </button>
+            </Link>
             <button
-              onClick={logout}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-sidebar-foreground hover:bg-sidebar-accent/50 transition-colors"
+              onClick={() => logout()}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors"
+              style={{ color: "rgba(255,255,255,0.45)" }}
             >
               <LogOut className="w-4 h-4" />
               Sign Out
             </button>
-            <Link href="/">
-              <button className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs text-sidebar-foreground/60 hover:text-sidebar-foreground transition-colors mt-1">
-                ← View Site
-              </button>
-            </Link>
           </div>
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 min-w-0">
-          <div className="container py-6 max-w-2xl">
+        <main className="flex-1 min-w-0 overflow-x-hidden">
+          <div className="max-w-2xl mx-auto px-4 py-6 pb-10">
             {children}
           </div>
         </main>
