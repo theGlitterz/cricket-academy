@@ -409,6 +409,9 @@ const bookingsRouter = router({
         });
       }
       await confirmBooking(input.id, ctx.user.id, input.adminNote);
+      // FUTURE: WhatsApp notification — send booking confirmed message to player
+      // const msg = buildBookingConfirmedMessage({ playerName: booking.playerName, ... });
+      // await sendWhatsAppMessage(booking.playerWhatsApp, msg);
       return { success: true };
     }),
 
@@ -433,6 +436,9 @@ const bookingsRouter = router({
         });
       }
       await rejectBooking(input.id, ctx.user.id, input.adminNote);
+      // FUTURE: WhatsApp notification — send booking rejected message to player
+      // const msg = buildBookingRejectedMessage({ playerName: booking.playerName, ... }, input.adminNote);
+      // await sendWhatsAppMessage(booking.playerWhatsApp, msg);
       return { success: true };
     }),
 
@@ -457,6 +463,9 @@ const bookingsRouter = router({
         });
       }
       await cancelBooking(input.id, ctx.user.id, input.adminNote);
+      // FUTURE: WhatsApp notification — send booking cancelled message to player
+      // const msg = buildBookingCancelledMessage({ playerName: booking.playerName, ... });
+      // await sendWhatsAppMessage(booking.playerWhatsApp, msg);
       return { success: true };
     }),
 });

@@ -30,6 +30,15 @@ import {
 } from "../drizzle/schema";
 
 // ─── V1 constant: single facility ────────────────────────────────────────────
+/**
+ * FUTURE: Multi-facility support
+ * Replace this constant with a dynamic lookup based on:
+ *   - Authenticated user's facilityId (for multi-coach SaaS)
+ *   - Subdomain (e.g. bestcricket.yourapp.com → facilityId=1)
+ *   - URL parameter (e.g. /facility/1/book)
+ * All DB helpers already accept facilityId as a parameter — only this
+ * constant needs to change when expanding to multiple facilities.
+ */
 export const FACILITY_ID = 1;
 
 // ─── DB singleton ─────────────────────────────────────────────────────────────

@@ -9,6 +9,7 @@ import { ChevronRight, Search, CalendarDays, Phone } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import AdminLayout from "./AdminLayout";
+import { StatusBadge } from "@/components/StatusBadge";
 
 // ─── Types & Helpers ──────────────────────────────────────────────────────────
 type StatusFilter = "all" | "pending" | "confirmed" | "rejected" | "cancelled";
@@ -21,19 +22,6 @@ const STATUS_TABS: { value: StatusFilter; label: string }[] = [
   { value: "cancelled", label: "Cancelled" },
 ];
 
-const STATUS_CSS: Record<string, string> = {
-  pending: "status-pending",
-  confirmed: "status-confirmed",
-  rejected: "status-rejected",
-  cancelled: "status-cancelled",
-};
-
-const STATUS_LABEL: Record<string, string> = {
-  pending: "Pending",
-  confirmed: "Confirmed",
-  rejected: "Rejected",
-  cancelled: "Cancelled",
-};
 
 function formatTime(t: string | null | undefined) {
   if (!t) return "";
@@ -131,9 +119,7 @@ export default function AdminBookings() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="text-sm font-semibold text-foreground">{b.playerName}</p>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${STATUS_CSS[b.bookingStatus] ?? ""}`}>
-                          {STATUS_LABEL[b.bookingStatus] ?? b.bookingStatus}
-                        </span>
+                        <StatusBadge status={b.bookingStatus as any} size="sm" />
                       </div>
                       <div className="flex items-center gap-1 mt-0.5">
                         <Phone className="w-3 h-3 text-muted-foreground" />

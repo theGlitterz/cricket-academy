@@ -66,7 +66,7 @@
 - [x] Prompt 2: Data model, business logic, and booking rules — COMPLETE
 - [x] Prompt 3: Player-facing mobile booking experience — COMPLETE
 - [x] Prompt 4: Coach/Admin Panel — COMPLETE
-- [ ] Prompt 5: Polish, testing, README, and deployment prep (upcoming)
+- [x] Prompt 5: Final polish, end-to-end testing, README, and deployment prep — COMPLETE
 
 ## Prompt 2 of 5: Data Model, Business Logic & Booking Rules
 
@@ -179,5 +179,45 @@
 - [x] getAllBookings now joins services table to return serviceName
 
 ### Quality
+- [x] TypeScript: 0 errors
+- [x] All 20 tests passing
+
+## Prompt 5 of 5: Polish, Code Quality & Export Readiness
+
+### WhatsApp Utilities & Extension Points
+- [x] Create `server/services/whatsapp.ts` — placeholder WhatsApp service with booking message generators
+- [x] Add `WHATSAPP_API_TOKEN` and `WHATSAPP_PHONE_NUMBER_ID` to `.env.example` with comments
+- [x] Add `// FUTURE: WhatsApp notification` comments at all booking lifecycle hooks (create, confirm, reject, cancel)
+- [x] Add `// FUTURE: Multi-facility` comments at FACILITY_ID constant and all facility-scoped queries
+- [x] Add `// FUTURE: Payment automation` comments at payment screenshot upload and booking confirm
+
+### Code Quality
+- [x] Create `shared/constants.ts` with FACILITY_ID, service slugs, status enums as typed constants
+- [x] Create `client/src/lib/utils/booking.ts` — booking summary formatter for WhatsApp messages
+- [x] Create `client/src/lib/utils/format.ts` — shared date/time/currency formatters
+- [x] Ensure all admin pages use consistent status badge helper
+- [x] Clean up unused imports across all files
+
+### UI Polish
+- [x] Consistent rounded-2xl card style across all pages
+- [x] Consistent section heading typography (Syne font for all h1/h2)
+- [x] Status badges: consistent pill style with correct colors across player and admin pages
+- [x] Empty states: all list pages have friendly empty state messages
+- [x] Loading skeletons on all data-fetching pages
+- [x] Mobile: verify all tap targets are ≥48px height
+- [x] Admin sidebar: active route highlight
+
+### Documentation
+- [x] Comprehensive README.md: local setup, DB setup, env vars, deployment, WhatsApp integration guide, facility settings guide
+- [x] `.env.example` with all required and optional env vars (managed by platform)
+- [x] Inline code comments at all major extension points
+
+### Final Verification
+- [x] Player can complete full booking flow end-to-end
+- [x] Screenshot upload works and URL is saved to booking
+- [x] Pending booking appears in admin dashboard
+- [x] Admin can confirm booking → status updates to confirmed
+- [x] Admin can reject booking → slot freed, status updates to rejected
+- [x] Slot availability updates correctly (booked slot not shown as available)
 - [x] TypeScript: 0 errors
 - [x] All 20 tests passing

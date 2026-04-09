@@ -17,22 +17,9 @@ import {
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import AdminLayout from "./AdminLayout";
+import { StatusBadge } from "@/components/StatusBadge";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-const STATUS_CSS: Record<string, string> = {
-  pending: "status-pending",
-  confirmed: "status-confirmed",
-  rejected: "status-rejected",
-  cancelled: "status-cancelled",
-};
-
-const STATUS_LABEL: Record<string, string> = {
-  pending: "Pending",
-  confirmed: "Confirmed",
-  rejected: "Rejected",
-  cancelled: "Cancelled",
-};
-
 function formatTime(t: string | null | undefined) {
   if (!t) return "";
   const [h, m] = t.split(":").map(Number);
@@ -178,9 +165,7 @@ export default function AdminDashboard() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <p className="text-sm font-semibold text-foreground truncate">{b.playerName}</p>
-                          <span className="text-[10px] status-pending px-1.5 py-0.5 rounded-full shrink-0">
-                            Pending
-                          </span>
+                          <StatusBadge status="pending" size="sm" />
                         </div>
                         <p className="text-xs text-muted-foreground mt-0.5 truncate">
                           {b.serviceName ?? "Service"} · {formatDate(b.bookingDate)} {b.startTime ? formatTime(b.startTime) : ""}
@@ -233,9 +218,7 @@ export default function AdminDashboard() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <p className="text-sm font-semibold text-foreground truncate">{b.playerName}</p>
-                          <span className={`text-[10px] ${STATUS_CSS[b.bookingStatus] ?? ""} px-1.5 py-0.5 rounded-full shrink-0`}>
-                            {STATUS_LABEL[b.bookingStatus] ?? b.bookingStatus}
-                          </span>
+                          <StatusBadge status={b.bookingStatus as any} size="sm" />
                         </div>
                         <p className="text-xs text-muted-foreground mt-0.5">
                           {b.serviceName ?? "Service"} · {b.startTime ? formatTime(b.startTime) : ""}{b.endTime ? ` – ${formatTime(b.endTime)}` : ""}

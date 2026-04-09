@@ -189,6 +189,46 @@
   /* Mobile safe area */
   .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0); }
   .safe-top    { padding-top:    env(safe-area-inset-top,    0); }
+
+  /* Cricket green direct utility (for components that need the raw color) */
+  .text-cricket-green { color: oklch(0.38 0.13 145); }
+  .bg-cricket-green   { background-color: oklch(0.38 0.13 145); }
+  .border-cricket-green { border-color: oklch(0.38 0.13 145); }
+
+  /* Minimum tap target for mobile accessibility (WCAG 2.5.5 — 44×44px) */
+  .tap-target {
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Card hover lift — subtle elevation on interaction */
+  .card-hover {
+    transition: box-shadow 0.15s ease, transform 0.15s ease;
+  }
+  .card-hover:hover {
+    box-shadow: 0 4px 20px oklch(0.38 0.13 145 / 0.10);
+    transform: translateY(-1px);
+  }
+
+  /* Page-level fade + slide-up entrance */
+  .page-enter {
+    animation: pageEnter 0.22s ease forwards;
+  }
+  @keyframes pageEnter {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Step transition for multi-step forms */
+  .step-enter {
+    animation: stepEnter 0.18s ease forwards;
+  }
+  @keyframes stepEnter {
+    from { opacity: 0; transform: translateX(12px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
 }
 
 @layer components {

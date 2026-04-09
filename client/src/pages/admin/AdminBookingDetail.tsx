@@ -34,33 +34,10 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import AdminLayout from "./AdminLayout";
+import { StatusBadge } from "@/components/StatusBadge";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-const STATUS_CSS: Record<string, string> = {
-  pending: "status-pending",
-  confirmed: "status-confirmed",
-  rejected: "status-rejected",
-  cancelled: "status-cancelled",
-};
-
-const STATUS_LABEL: Record<string, string> = {
-  pending: "Pending Review",
-  confirmed: "Confirmed",
-  rejected: "Rejected",
-  cancelled: "Cancelled",
-};
-
-const PAYMENT_CSS: Record<string, string> = {
-  pending_review: "bg-yellow-100 text-yellow-800",
-  confirmed: "bg-green-100 text-green-800",
-  rejected: "bg-red-100 text-red-800",
-};
-
-const PAYMENT_LABEL: Record<string, string> = {
-  pending_review: "Payment Pending Review",
-  confirmed: "Payment Confirmed",
-  rejected: "Payment Rejected",
-};
+// Status rendering is handled by the shared <StatusBadge> component.
 
 function formatTime(t: string | null | undefined) {
   if (!t) return "—";
@@ -208,12 +185,8 @@ export default function AdminBookingDetail() {
           <p className="text-xs font-mono text-muted-foreground mt-0.5">{booking.referenceId}</p>
         </div>
         <div className="flex flex-col items-end gap-1.5">
-          <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${STATUS_CSS[booking.bookingStatus] ?? ""}`}>
-            {STATUS_LABEL[booking.bookingStatus] ?? booking.bookingStatus}
-          </span>
-          <span className={`text-[10px] px-2 py-0.5 rounded-full ${PAYMENT_CSS[booking.paymentStatus] ?? ""}`}>
-            {PAYMENT_LABEL[booking.paymentStatus] ?? booking.paymentStatus}
-          </span>
+          <StatusBadge status={booking.bookingStatus as any} />
+          <StatusBadge status={booking.paymentStatus as any} size="sm" />
         </div>
       </div>
 
