@@ -1,263 +1,217 @@
 import {
   boolean,
   decimal,
-  int,
-  mysqlEnum,
-  mysqlTable,
+  integer,
+  pgEnum,
+  pgTable,
+  serial,
   text,
   timestamp,
-  varchar,
-} from "drizzle-orm/mysql-core";
+} from "drizzle-orm/pg-core";
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+export const roleEnum = pgEnum("role", ["user", "admin"]);
+export const availabilityStatusEnum = pgEnum("availability_status", [
+  "available",
+  "booked",
+  "blocked",
+]);
+export const paymentStatusEnum = pgEnum("payment_status", [
+  "pending_review",
+  "confirmed",
+  "rejected",
+]);
+export const bookingStatusEnum = pgEnum("booking_status", [
+  "pending",
+  "confirmed",
+  "rejected",
+  "cancelled",
+]);
 
 // ─── Users ────────────────────────────────────────────────────────────────────
-
 /**
  * Admin user table for the coach/admin panel.
  * Self-hosted: credentials (email + bcrypt passwordHash) stored here.
  * role='admin' grants access to the admin panel.
  */
-export const users = mysqlTable("users", {
-  id: int("id").autoincrement().primaryKey(),
-  email: varchar("email", { length: 320 }).notNull().unique(),
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull().unique(),
   /** bcrypt hash of the admin password */
-  passwordHash: varchar("passwordHash", { length: 256 }).notNull(),
+  passwordHash: text("password_hash").notNull(),
   name: text("name"),
-  role: mysqlEnum("role", ["user", "admin"]).default("admin").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-  lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
+  role: roleEnum("role").default("admin").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  lastSignedIn: timestamp("last_signed_in").defaultNow().notNull(),
 });
-
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
 // ─── Facilities ───────────────────────────────────────────────────────────────
-
 /**
  * Represents a single cricket facility.
  *
  * V1 uses exactly one facility (BestCricketAcademy, id=1).
  * The schema is designed to support multiple facilities in the future —
  * all downstream tables carry a facilityId foreign key.
- *
- * Fields map directly to the Prompt 2 spec:
- *   id, facility_name, coach_name, coach_whatsapp_number,
- *   upi_id, upi_qr_image_url
- *
- * Extended with operational fields:
- *   address, working_hours, payment_instructions, google_maps_url
  */
-export const facilities = mysqlTable("facilities", {
-  id: int("id").autoincrement().primaryKey(),
+export const facilities = pgTable("facilities", {
+  id: serial("id").primaryKey(),
   /** Display name, e.g. "BestCricketAcademy" */
-  facilityName: varchar("facilityName", { length: 128 }).notNull(),
+  facilityName: text("facility_name").notNull(),
   /** Coach / owner full name */
-  coachName: varchar("coachName", { length: 128 }),
+  coachName: text("coach_name"),
   /** Primary WhatsApp contact for the coach */
-  coachWhatsApp: varchar("coachWhatsApp", { length: 20 }),
+  coachWhatsApp: text("coach_whatsapp"),
   /** UPI ID for payment, e.g. coach@upi or 9876543210@paytm */
-  upiId: varchar("upiId", { length: 128 }),
-  /** S3 URL of the UPI QR code image */
-  upiQrImageUrl: text("upiQrImageUrl"),
+  upiId: text("upi_id"),
+  /** Cloudinary URL of the UPI QR code image */
+  upiQrImageUrl: text("upi_qr_image_url"),
   /** Full address shown on the booking page */
   address: text("address"),
   /** Working hours display string, e.g. "6:00 AM – 9:00 PM" */
-  workingHours: varchar("workingHours", { length: 64 }),
+  workingHours: text("working_hours"),
   /** Short note shown on payment page */
-  paymentInstructions: text("paymentInstructions"),
+  paymentInstructions: text("payment_instructions"),
   /** Google Maps link */
-  googleMapsUrl: text("googleMapsUrl"),
+  googleMapsUrl: text("google_maps_url"),
   /** Whether this facility is publicly visible */
-  isActive: boolean("isActive").notNull().default(true),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
-
 export type Facility = typeof facilities.$inferSelect;
 export type InsertFacility = typeof facilities.$inferInsert;
 
 // ─── Services ─────────────────────────────────────────────────────────────────
-
 /**
  * A bookable service offered by a facility.
  * V1 services: Ground Booking, Net Practice, Personal Coaching.
- *
- * Fields map to Prompt 2 spec:
- *   id, facility_id, name, duration_minutes, price, active_status
  */
-export const services = mysqlTable("services", {
-  id: int("id").autoincrement().primaryKey(),
+export const services = pgTable("services", {
+  id: serial("id").primaryKey(),
   /** FK → facilities.id */
-  facilityId: int("facilityId").notNull(),
+  facilityId: integer("facility_id").notNull(),
   /** URL-safe slug used in booking links, e.g. "ground-booking" */
-  slug: varchar("slug", { length: 64 }).notNull().unique(),
+  slug: text("slug").notNull().unique(),
   /** Display name, e.g. "Ground Booking" */
-  name: varchar("name", { length: 128 }).notNull(),
+  name: text("name").notNull(),
   /** Short description shown on the booking page */
   description: text("description"),
   /** Session duration in minutes */
-  durationMinutes: int("durationMinutes").notNull().default(60),
-  /** Price per slot in INR (decimal for future multi-currency support) */
+  durationMinutes: integer("duration_minutes").notNull().default(60),
+  /** Price per slot in INR */
   price: decimal("price", { precision: 10, scale: 2 }).notNull(),
-  /** active_status: whether this service is available for booking */
-  activeStatus: boolean("activeStatus").notNull().default(true),
+  /** Whether this service is available for booking */
+  activeStatus: boolean("active_status").notNull().default(true),
   /** Display order on the booking page */
-  sortOrder: int("sortOrder").notNull().default(0),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
-
 export type Service = typeof services.$inferSelect;
 export type InsertService = typeof services.$inferInsert;
 
 // ─── Slots ────────────────────────────────────────────────────────────────────
-
 /**
  * A specific time window on a specific date for a service at a facility.
- *
- * Fields map to Prompt 2 spec:
- *   id, facility_id, service_id, date, start_time, end_time, availability_status
  *
  * availability_status values:
  *   available — open for booking
  *   booked    — a confirmed or pending booking occupies this slot
- *   blocked   — admin has manually blocked this slot (no bookings allowed)
+ *   blocked   — admin has manually blocked this slot
  */
-export const slots = mysqlTable("slots", {
-  id: int("id").autoincrement().primaryKey(),
+export const slots = pgTable("slots", {
+  id: serial("id").primaryKey(),
   /** FK → facilities.id */
-  facilityId: int("facilityId").notNull(),
+  facilityId: integer("facility_id").notNull(),
   /** FK → services.id */
-  serviceId: int("serviceId").notNull(),
+  serviceId: integer("service_id").notNull(),
   /** Date in YYYY-MM-DD format */
-  date: varchar("date", { length: 10 }).notNull(),
+  date: text("date").notNull(),
   /** Start time in HH:MM (24h) format */
-  startTime: varchar("startTime", { length: 5 }).notNull(),
+  startTime: text("start_time").notNull(),
   /** End time in HH:MM (24h) format */
-  endTime: varchar("endTime", { length: 5 }).notNull(),
-  /**
-   * availability_status:
-   *   available — open for booking
-   *   booked    — occupied by a pending or confirmed booking
-   *   blocked   — manually blocked by admin
-   */
-  availabilityStatus: mysqlEnum("availabilityStatus", [
-    "available",
-    "booked",
-    "blocked",
-  ])
+  endTime: text("end_time").notNull(),
+  availabilityStatus: availabilityStatusEnum("availability_status")
     .notNull()
     .default("available"),
-  /** Max concurrent bookings (for net lanes that allow 2 players) */
-  maxCapacity: int("maxCapacity").notNull().default(1),
-  /** Current booking count (pending + confirmed) for capacity tracking */
-  bookedCount: int("bookedCount").notNull().default(0),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  /** Max concurrent bookings */
+  maxCapacity: integer("max_capacity").notNull().default(1),
+  /** Current booking count (pending + confirmed) */
+  bookedCount: integer("booked_count").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
-
 export type Slot = typeof slots.$inferSelect;
 export type InsertSlot = typeof slots.$inferInsert;
 
 // ─── Bookings ─────────────────────────────────────────────────────────────────
-
 /**
  * A player's booking request for a specific slot.
- *
- * Fields map to Prompt 2 spec:
- *   id, facility_id, service_id, player_name, player_whatsapp_number,
- *   booking_date, start_time, end_time, amount,
- *   screenshot_url, payment_status, booking_status, created_at
  *
  * payment_status values:
  *   pending_review — player has submitted, coach has not reviewed yet
  *   confirmed      — coach verified payment and confirmed
- *   rejected       — coach rejected (wrong amount, unclear screenshot, etc.)
+ *   rejected       — coach rejected
  *
  * booking_status values:
  *   pending    — submitted, awaiting coach review
- *   confirmed  — coach confirmed payment and booking
- *   rejected   — coach rejected the booking
- *   cancelled  — player or admin cancelled after confirmation
+ *   confirmed  — booking is confirmed
+ *   rejected   — booking was rejected
+ *   cancelled  — booking was cancelled after confirmation
  *
  * Status lifecycle:
  *   pending → confirmed  (coach confirms payment)
  *   pending → rejected   (coach rejects; slot reverts to available)
  *   confirmed → cancelled (admin/player cancels; slot reverts to available)
  */
-export const bookings = mysqlTable("bookings", {
-  id: int("id").autoincrement().primaryKey(),
+export const bookings = pgTable("bookings", {
+  id: serial("id").primaryKey(),
   /** Short human-readable reference, e.g. BCA-20240409-1234 */
-  referenceId: varchar("referenceId", { length: 32 }).notNull().unique(),
+  referenceId: text("reference_id").notNull().unique(),
   /** FK → facilities.id */
-  facilityId: int("facilityId").notNull(),
+  facilityId: integer("facility_id").notNull(),
   /** FK → services.id */
-  serviceId: int("serviceId").notNull(),
-  /** FK → slots.id — the specific slot being booked */
-  slotId: int("slotId").notNull(),
+  serviceId: integer("service_id").notNull(),
+  /** FK → slots.id */
+  slotId: integer("slot_id").notNull(),
   /** Player's full name */
-  playerName: varchar("playerName", { length: 128 }).notNull(),
+  playerName: text("player_name").notNull(),
   /** WhatsApp number with country code, e.g. +919876543210 */
-  playerWhatsApp: varchar("playerWhatsApp", { length: 20 }).notNull(),
-  /** Optional email for future notification support */
-  playerEmail: varchar("playerEmail", { length: 320 }),
-  /**
-   * Denormalized from slot for easy querying without joins.
-   * booking_date: YYYY-MM-DD
-   */
-  bookingDate: varchar("bookingDate", { length: 10 }).notNull(),
+  playerWhatsApp: text("player_whatsapp").notNull(),
+  /** Optional email */
+  playerEmail: text("player_email"),
+  /** Denormalized date YYYY-MM-DD */
+  bookingDate: text("booking_date").notNull(),
   /** Denormalized start time HH:MM */
-  startTime: varchar("startTime", { length: 5 }).notNull(),
+  startTime: text("start_time").notNull(),
   /** Denormalized end time HH:MM */
-  endTime: varchar("endTime", { length: 5 }).notNull(),
+  endTime: text("end_time").notNull(),
   /** Amount in INR — copied from service price at time of booking */
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
-  /** S3 URL of the UPI payment screenshot uploaded by the player */
-  screenshotUrl: text("screenshotUrl"),
-  /**
-   * payment_status:
-   *   pending_review — awaiting coach review
-   *   confirmed      — payment verified
-   *   rejected       — payment rejected
-   */
-  paymentStatus: mysqlEnum("paymentStatus", [
-    "pending_review",
-    "confirmed",
-    "rejected",
-  ])
+  /** Cloudinary URL of the UPI payment screenshot */
+  screenshotUrl: text("screenshot_url"),
+  paymentStatus: paymentStatusEnum("payment_status")
     .notNull()
     .default("pending_review"),
-  /**
-   * booking_status:
-   *   pending   — awaiting coach action
-   *   confirmed — booking is confirmed
-   *   rejected  — booking was rejected
-   *   cancelled — booking was cancelled after confirmation
-   */
-  bookingStatus: mysqlEnum("bookingStatus", [
-    "pending",
-    "confirmed",
-    "rejected",
-    "cancelled",
-  ])
+  bookingStatus: bookingStatusEnum("booking_status")
     .notNull()
     .default("pending"),
   /** Admin note when confirming or rejecting */
-  adminNote: text("adminNote"),
+  adminNote: text("admin_note"),
   /** UTC timestamp when the booking was reviewed */
-  reviewedAt: timestamp("reviewedAt"),
+  reviewedAt: timestamp("reviewed_at"),
   /** ID of the admin user who reviewed */
-  reviewedByUserId: int("reviewedByUserId"),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  reviewedByUserId: integer("reviewed_by_user_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
-
 export type Booking = typeof bookings.$inferSelect;
 export type InsertBooking = typeof bookings.$inferInsert;
 
-// ─── Legacy alias (kept for backward compat during migration) ─────────────────
-// The old facilitySettings table is replaced by the facilities table.
-// This alias allows old code to compile during the transition.
+// ─── Legacy alias (kept for backward compat) ──────────────────────────────────
 export const facilitySettings = facilities;
 export type FacilitySettings = Facility;
 export type InsertFacilitySettings = InsertFacility;

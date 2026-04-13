@@ -9,8 +9,9 @@
  *   transitions) so they cannot be bypassed by any caller.
  */
 
+import { neon } from "@neondatabase/serverless";
 import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/mysql2";
+import { drizzle } from "drizzle-orm/neon-http";
 import { nanoid } from "nanoid";
 import {
   Booking,
@@ -48,7 +49,8 @@ let _db: ReturnType<typeof drizzle> | null = null;
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      _db = drizzle(process.env.DATABASE_URL);
+      const sqlClient = neon(process.env.DATABASE_URL);
+      _db = drizzle(sqlClient);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
@@ -165,7 +167,7 @@ export async function upsertService(data: InsertService): Promise<void> {
   await db
     .insert(services)
     .values(data)
-    .onDuplicateKeyUpdate({ set: { ...data, updatedAt: new Date() } });
+    .onConflictDoUpdate({ target: services.slug, set: { ...data, updatedAt: new Date() } });
 }
 
 // ─── Slots ────────────────────────────────────────────────────────────────────
@@ -263,7 +265,8 @@ export async function createSlot(data: InsertSlot): Promise<number> {
     facilityId: data.facilityId ?? FACILITY_ID,
     availabilityStatus: "available",
   });
-  return (result[0] as { insertId: number }).insertId;
+  const inserted = result as unknown as { id: number }[];
+  return inserted[0]?.id ?? 0;
 }
 
 /**
@@ -280,7 +283,10 @@ export async function markSlotBooked(slotId: number): Promise<boolean> {
     .update(slots)
     .set({ availabilityStatus: "booked", bookedCount: sql`${slots.bookedCount} + 1` })
     .where(and(eq(slots.id, slotId), eq(slots.availabilityStatus, "available")));
-  return (result[0] as { affectedRows: number }).affectedRows > 0;
+  // Neon/pg returns rowCount on update; check via re-fetch
+  const updated = result as unknown as { rowCount?: number } | unknown[];
+  if (Array.isArray(updated)) return updated.length > 0;
+  return (updated as { rowCount?: number }).rowCount !== 0;
 }
 
 /**
@@ -297,6 +303,7 @@ export async function markSlotAvailable(slotId: number): Promise<void> {
     .set({
       availabilityStatus: "available",
       bookedCount: sql`GREATEST(0, ${slots.bookedCount} - 1)`,
+      updatedAt: new Date(),
     })
     .where(eq(slots.id, slotId));
 }
@@ -378,9 +385,9 @@ export async function createBooking(data: {
     amount: service.price,
     bookingStatus: "pending",
     paymentStatus: "pending_review",
-  });
+  }).returning({ id: bookings.id });
 
-  return { id: (result[0] as { insertId: number }).insertId, referenceId };
+  return { id: result[0].id, referenceId };
 }
 
 /** Get a booking by its numeric id. */

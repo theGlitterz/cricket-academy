@@ -253,3 +253,17 @@
 ### Tests
 - [x] Update `server/bookings.test.ts` — update mocked user shape (remove openId)
 - [x] Verify 20/20 tests still pass
+
+## Neon PostgreSQL + Vercel Migration
+
+- [x] Remove `mysql2`, install `@neondatabase/serverless` + `ws` + `@types/ws`
+- [x] Update `drizzle/schema.ts` — `mysqlTable` → `pgTable`, `varchar` → `text`, `tinyint` → `boolean`, `serial` for IDs
+- [x] Update `server/db.ts` — use Neon HTTP driver (`neon()` from `@neondatabase/serverless`)
+- [x] Update `drizzle.config.ts` — dialect `mysql` → `postgresql`, add unpooled URL support
+- [x] Write new PostgreSQL migration SQL (generate via drizzle-kit generate)
+- [x] Add `vercel.json` — rewrite `/api/*` to serverless function
+- [x] Add `api/index.ts` — Vercel serverless entry point wrapping Express
+- [x] Update `package.json` — add `vercel-build` script
+- [x] Update `DEPLOYMENT.md` — Neon + Vercel free stack guide
+- [x] TypeScript check passes (0 errors)
+- [x] All tests pass (20/20)

@@ -1,119 +1,193 @@
-# BestCricketAcademy — Self-Hosted Deployment Guide
+# Deployment Guide — BestCricketAcademy
 
-This guide covers deploying the app on **Vercel + PlanetScale** (recommended free stack) or any equivalent Node.js host + MySQL database.
+This guide covers deploying the app on the **free stack**: Vercel (hosting) + Neon (PostgreSQL) + Cloudinary (file storage).
 
 ---
 
-## Required Environment Variables
+## Stack Overview
 
-Set these in your hosting provider's environment settings (never commit them to git):
-
-| Variable | Description | Where to Get It |
+| Service | Purpose | Free Tier |
 |---|---|---|
-| `DATABASE_URL` | MySQL connection string | PlanetScale / Railway / Aiven |
-| `ADMIN_EMAIL` | Admin login email | You choose |
-| `ADMIN_PASSWORD` | Admin login password | You choose (use a strong password) |
-| `JWT_SECRET` | Session cookie signing secret | Generate with command below |
-| `CLOUDINARY_CLOUD_NAME` | Cloudinary cloud name | [cloudinary.com](https://cloudinary.com) |
-| `CLOUDINARY_API_KEY` | Cloudinary API key | Cloudinary dashboard |
-| `CLOUDINARY_API_SECRET` | Cloudinary API secret | Cloudinary dashboard |
+| [Vercel](https://vercel.com) | Hosting — React frontend + Express API as serverless functions | Unlimited personal projects |
+| [Neon](https://neon.tech) | PostgreSQL database | 0.5 GB storage, 1 project |
+| [Cloudinary](https://cloudinary.com) | File storage (payment screenshots, QR codes) | 25 GB storage, 25 GB bandwidth/month |
+
+---
+
+## Step 1 — Set Up Neon Database
+
+1. Sign up at [neon.tech](https://neon.tech) and create a new project.
+2. Choose a region closest to your users (e.g., `ap-southeast-1` for India).
+3. From the Neon dashboard, copy **two** connection strings:
+   - **Pooled connection string** → used as `DATABASE_URL` (for the running app)
+   - **Direct connection string** → used as `DATABASE_URL_UNPOOLED` (for migrations only)
+
+Both strings look like:
+```
+postgresql://username:password@ep-xxx.ap-southeast-1.aws.neon.tech/neondb?sslmode=require
+```
+The pooled one has `-pooler` in the hostname.
+
+---
+
+## Step 2 — Run Database Migrations
+
+Install dependencies and run migrations against your Neon database:
+
+```bash
+# Clone the repo and install
+pnpm install
+
+# Set the direct connection string for migrations
+export DATABASE_URL_UNPOOLED="postgresql://..."
+export DATABASE_URL="postgresql://..."   # pooled, used by seed script
+
+# Generate and apply migrations
+pnpm drizzle-kit generate
+pnpm drizzle-kit migrate
+
+# Seed initial data (services, facility, sample slots)
+npx tsx server/seed.ts
+```
+
+---
+
+## Step 3 — Set Up Cloudinary
+
+1. Sign up at [cloudinary.com](https://cloudinary.com).
+2. From the dashboard, copy:
+   - **Cloud Name** (e.g., `my-cricket-app`)
+   - **API Key**
+   - **API Secret**
+
+---
+
+## Step 4 — Deploy to Vercel
+
+### 4a. Connect Repository
+
+1. Push your code to a GitHub repository.
+2. Go to [vercel.com](https://vercel.com) → **New Project** → import your GitHub repo.
+3. Vercel auto-detects the project. Leave the default settings as-is.
+
+### 4b. Set Environment Variables
+
+In the Vercel dashboard → **Project Settings** → **Environment Variables**, add:
+
+| Variable | Value | Notes |
+|---|---|---|
+| `DATABASE_URL` | Neon **pooled** connection string | Used by the running app |
+| `DATABASE_URL_UNPOOLED` | Neon **direct** connection string | Used by drizzle-kit only |
+| `JWT_SECRET` | A long random string (32+ chars) | Signs admin session cookies |
+| `ADMIN_EMAIL` | Your admin email | e.g., `coach@bestcricket.com` |
+| `ADMIN_PASSWORD` | Your admin password | See security note below |
+| `CLOUDINARY_CLOUD_NAME` | From Cloudinary dashboard | |
+| `CLOUDINARY_API_KEY` | From Cloudinary dashboard | |
+| `CLOUDINARY_API_SECRET` | From Cloudinary dashboard | |
 
 **Generate a JWT secret:**
 ```bash
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
+### 4c. Deploy
+
+Click **Deploy**. Vercel runs `pnpm run vercel-build` which builds the React frontend into `dist/public`. The API is served as a serverless function from `api/index.ts`.
+
 ---
 
-## Option A: Vercel + PlanetScale (Recommended Free Stack)
+## Admin Password Security
 
-### Step 1: Set up PlanetScale database
+For development, you can set `ADMIN_PASSWORD` to a plain text password — the server bcrypt-hashes it on every login check.
 
-1. Create a free account at [planetscale.com](https://planetscale.com)
-2. Create a new database named `best-cricket-academy`
-3. Go to **Connect** → select **Node.js** → copy the connection string
-4. The connection string looks like:
-   ```
-   mysql://USERNAME:PASSWORD@HOST/DATABASE?ssl={"rejectUnauthorized":true}
-   ```
+For production, it is strongly recommended to pre-hash the password and store the hash:
 
-### Step 2: Run database migrations
-
-Install dependencies locally and run the migration:
 ```bash
-npm install
-DATABASE_URL="your-planetscale-url" npx drizzle-kit push
+node -e "const b=require('bcryptjs'); b.hash('YourPassword123', 12).then(h=>console.log(h))"
 ```
 
-Or apply the SQL files manually in the PlanetScale console in order:
-- `drizzle/0000_first_justice.sql`
-- `drizzle/0001_huge_sinister_six.sql`
-- `drizzle/0002_prompt2_schema.sql`
-- `drizzle/0003_self_hosted_users.sql`
-
-### Step 3: Deploy to Vercel
-
-1. Push your code to GitHub
-2. Import the repository in [vercel.com](https://vercel.com)
-3. Set **Framework Preset** to **Other** (it's an Express app)
-4. Set **Build Command** to: `pnpm build`
-5. Set **Output Directory** to: `dist`
-6. Add all environment variables from the table above
-7. Deploy
-
-### Step 4: Set up Cloudinary
-
-1. Create a free account at [cloudinary.com](https://cloudinary.com)
-2. Go to **Dashboard** → copy your **Cloud Name**, **API Key**, and **API Secret**
-3. Add them to your Vercel environment variables
+Then set `ADMIN_PASSWORD` to the resulting hash (starts with `$2b$12$...`). The server detects it is already a hash and skips double-hashing.
 
 ---
 
-## Option B: Railway (Easiest — One Platform)
+## Environment Variables Reference
 
-Railway hosts both your app and database in one place.
+```bash
+# ── Required ──────────────────────────────────────────────────────────────────
 
-1. Create an account at [railway.app](https://railway.app)
-2. Create a new project → **Deploy from GitHub repo**
-3. Add a **MySQL** plugin to the project
-4. Railway auto-sets `DATABASE_URL` — just add the other env vars
-5. Deploy
+# Neon PostgreSQL — pooled URL for the running app
+DATABASE_URL=postgresql://user:pass@ep-xxx-pooler.region.aws.neon.tech/neondb?sslmode=require
 
----
+# Neon PostgreSQL — direct URL for drizzle-kit migrations only
+DATABASE_URL_UNPOOLED=postgresql://user:pass@ep-xxx.region.aws.neon.tech/neondb?sslmode=require
 
-## Option C: Render + Neon (PostgreSQL alternative)
+# JWT secret for signing admin session cookies
+JWT_SECRET=your-super-secret-jwt-key-at-least-32-chars
 
-> Note: The app currently uses MySQL. To use PostgreSQL (Neon), you'd need to change `drizzle.config.ts` dialect from `mysql` to `postgresql` and update the schema imports from `drizzle-orm/mysql-core` to `drizzle-orm/pg-core`.
+# Admin credentials
+ADMIN_EMAIL=coach@bestcricket.com
+ADMIN_PASSWORD=YourSecurePassword123
 
----
+# Cloudinary file storage
+CLOUDINARY_CLOUD_NAME=your-cloud-name
+CLOUDINARY_API_KEY=123456789012345
+CLOUDINARY_API_SECRET=your-api-secret
 
-## Admin Login
+# ── Optional ──────────────────────────────────────────────────────────────────
 
-After deployment, navigate to `/admin/login` and sign in with the `ADMIN_EMAIL` and `ADMIN_PASSWORD` you set.
-
-On first login, the system automatically creates an admin user record in the database.
-
----
-
-## File Storage (Cloudinary)
-
-Payment screenshots and UPI QR codes are uploaded to Cloudinary. The free tier provides:
-- 25 GB storage
-- 25 GB monthly bandwidth
-- Sufficient for hundreds of payment screenshots
+# WhatsApp Business API (for automated notifications — not required for manual WhatsApp)
+# WHATSAPP_API_TOKEN=your-token
+# WHATSAPP_PHONE_NUMBER_ID=your-phone-number-id
+```
 
 ---
 
-## Security Checklist
+## Local Development
 
-Before going live:
+```bash
+# Install dependencies
+pnpm install
 
-- [ ] Set a strong `ADMIN_PASSWORD` (12+ characters, mixed case, numbers, symbols)
-- [ ] Set a random `JWT_SECRET` (use the generate command above)
-- [ ] Enable HTTPS on your hosting provider (Vercel and Railway do this automatically)
-- [ ] Restrict database access to your app's IP (PlanetScale does this automatically)
-- [ ] Consider setting `ADMIN_PASSWORD` to a bcrypt hash for extra security:
-  ```bash
-  node -e "const b=require('bcryptjs'); b.hash('your-password',10).then(h=>console.log(h))"
-  ```
-  Then set `ADMIN_PASSWORD` to the resulting `$2b$...` hash.
+# Create a .env file with your local values
+cat > .env << 'EOF'
+DATABASE_URL=postgresql://...
+DATABASE_URL_UNPOOLED=postgresql://...
+JWT_SECRET=local-dev-secret-change-in-production
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=localpassword
+CLOUDINARY_CLOUD_NAME=your-cloud-name
+CLOUDINARY_API_KEY=your-key
+CLOUDINARY_API_SECRET=your-secret
+EOF
+
+# Start the dev server (Express + Vite HMR)
+pnpm dev
+```
+
+The app runs at `http://localhost:3000`.
+
+---
+
+## Alternative Hosting Options
+
+If you prefer not to use Vercel, the app also works on:
+
+| Platform | Notes |
+|---|---|
+| [Railway](https://railway.app) | Easiest for Express apps; $5/month after free trial |
+| [Render](https://render.com) | Free tier available; sleeps after 15 min inactivity |
+| [Fly.io](https://fly.io) | Docker-based; generous free tier |
+
+For Railway/Render/Fly.io, use the standard `pnpm build && pnpm start` commands. The `vercel.json` file is ignored on these platforms.
+
+---
+
+## Post-Deployment Checklist
+
+- [ ] Visit `https://your-app.vercel.app/admin/login` and log in with your admin credentials
+- [ ] Go to **Settings** → update facility name, coach name, WhatsApp number, UPI ID
+- [ ] Upload your UPI QR code image
+- [ ] Go to **Slots** → create your first week of booking slots
+- [ ] Test the full player booking flow from the homepage
+- [ ] Verify payment screenshot upload works (Cloudinary)
+- [ ] Share the booking link with players: `https://your-app.vercel.app`

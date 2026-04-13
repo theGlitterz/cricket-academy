@@ -102,8 +102,8 @@ async function seed() {
         "Pay the exact amount via UPI and upload the payment screenshot to confirm your booking.",
       googleMapsUrl: null,
       isActive: true,
-    });
-    facilityId = (inserted as any).insertId ?? 1;
+    }).returning({ id: facilities.id });
+    facilityId = inserted.id;
     console.log("✅ Created facility: BestCricketAcademy");
   } else {
     facilityId = existingFacility[0].id;
@@ -124,8 +124,8 @@ async function seed() {
       const [inserted] = await db.insert(services).values({
         ...service,
         facilityId,
-      });
-      const newId = (inserted as any).insertId;
+      }).returning({ id: services.id });
+      const newId = inserted.id;
       createdServiceIds[service.slug] = newId;
       console.log(`✅ Created service: ${service.name} (id=${newId})`);
     } else {
