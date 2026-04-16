@@ -267,3 +267,8 @@
 - [x] Update `DEPLOYMENT.md` — Neon + Vercel free stack guide
 - [x] TypeScript check passes (0 errors)
 - [x] All tests pass (20/20)
+
+## Bug Fixes
+
+- [ ] Remove broken `patchedDependencies` (wouter@3.7.1) from package.json so pnpm install works on Windows
+- [x] Fix vercel.json so Vercel serves the React app correctly (not raw index.html text)
