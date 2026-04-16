@@ -270,5 +270,5 @@
 
 ## Bug Fixes
 
-- [ ] Remove broken `patchedDependencies` (wouter@3.7.1) from package.json so pnpm install works on Windows
+- [x] Remove broken `patchedDependencies` (wouter@3.7.1) from package.json so pnpm install works on Windows
 - [x] Fix vercel.json so Vercel serves the React app correctly (not raw index.html text)
