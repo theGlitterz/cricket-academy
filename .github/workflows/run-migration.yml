@@ -19,10 +19,14 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: psql "$DATABASE_URL" -c "select 1;"
 
-      - name: Run migration
+      - name: Run all migrations
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: psql "$DATABASE_URL" -f drizzle/0003_self_hosted_users.sql
+        run: |
+          for file in drizzle/*.sql; do
+            echo "Running $file"
+            psql "$DATABASE_URL" -f "$file"
+          done
 
       - name: Show tables
         env:
