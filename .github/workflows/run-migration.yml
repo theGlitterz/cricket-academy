@@ -1,0 +1,30 @@
+name: Run Neon Migration
+
+on:
+  workflow_dispatch:
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Test database connection
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: psql "$DATABASE_URL" -c "select 1;"
+
+      - name: Run migration
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: psql "$DATABASE_URL" -f drizzle/0003_self_hosted_users.sql
+
+      - name: Show tables
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: psql "$DATABASE_URL" -c "\dt"
