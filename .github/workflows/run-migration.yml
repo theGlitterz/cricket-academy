@@ -14,21 +14,34 @@ jobs:
       - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
+      - name: Debug repo files
+        run: |
+          pwd
+          ls -la
+          echo "---- drizzle folder ----"
+          ls -la drizzle
+
       - name: Test database connection
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: psql "$DATABASE_URL" -c "select 1;"
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "select current_database(), current_user, current_schema();"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "select 1;"
 
-      - name: Run all migrations
+      - name: Run all migrations with hard fail
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           for file in drizzle/*.sql; do
+            echo "=============================="
             echo "Running $file"
-            psql "$DATABASE_URL" -f "$file"
+            echo "=============================="
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -a -f "$file"
           done
 
-      - name: Show tables
+      - name: Show public tables
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: psql "$DATABASE_URL" -c "\dt"
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "\dt public.*"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "select table_schema, table_name from information_schema.tables where table_schema not in ('pg_catalog','information_schema') order by table_schema, table_name;"
